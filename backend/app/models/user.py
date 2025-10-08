@@ -5,9 +5,6 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
 
-if TYPE_CHECKING:
-    from .item import Item
-
 # Shared properties
 class UserBase(SQLModel):
     email: EmailStr = Field(unique=True, index=True, max_length=255)
@@ -47,8 +44,6 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
-    items: Optional[list["Item"]] = Relationship(back_populates="owner", cascade_delete=True)
-
 
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
