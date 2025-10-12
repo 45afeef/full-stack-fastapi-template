@@ -1,11 +1,14 @@
+from datetime import datetime
 from  typing import TYPE_CHECKING, Optional
 import uuid
 
 from pydantic import EmailStr
+
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from .profile import Profile
+from app.models.travel.base import TimestampMixin
 
 
 # Shared properties
@@ -44,7 +47,7 @@ class UpdatePassword(SQLModel):
 
 
 # Database model, database table inferred from class name
-class User(UserBase, table=True):
+class User(UserBase,TimestampMixin, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
     
@@ -53,6 +56,8 @@ class User(UserBase, table=True):
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
     id: uuid.UUID
+    created_at: datetime | None
+    updated_at: datetime | None
 
 
 class UsersPublic(SQLModel):

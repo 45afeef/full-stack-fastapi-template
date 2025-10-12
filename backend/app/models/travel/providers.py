@@ -1,8 +1,14 @@
+from  typing import TYPE_CHECKING
+
 from typing import Optional
 from uuid import UUID
 from sqlmodel import SQLModel, Field, Relationship
-from app.models.user.user import User
+
 from .enums import ServiceProviderType
+
+if TYPE_CHECKING:
+    from app.models.user.user import User
+
 
 
 class ServiceProvider(SQLModel, table=True):
