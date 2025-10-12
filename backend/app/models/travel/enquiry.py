@@ -17,7 +17,7 @@ class EnquiryDetails(SQLModel, table=True):
     drop_location: Optional[str] = Field(default=None)
     created_at: Optional[datetime] = Field(default=None)
     handled_by: Optional[UUID] = Field(default=None)
-    enquired_by: Optional[UUID] = Field(default=None, foreign_key="userprofile.id")
+    enquired_by: Optional[UUID] = Field(default=None, foreign_key="profile.id")
 
 
 __all__ = ["EnquiryDetails"]

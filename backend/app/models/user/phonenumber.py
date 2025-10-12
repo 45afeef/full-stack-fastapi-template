@@ -1,38 +1,35 @@
 from typing import Optional
 import uuid
 
-from sqlmodel import Field, Relationship, SQLModel  
+from sqlmodel import Field, SQLModel
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from .person import Person
 
 # Shared properties
 class PhoneNumberBase(SQLModel):
-    """
-    PhoneNumber model to store phone numbers associated with individuals.
-    This class is used to store phone numbers that can be linked to persons in the system.
-    """
     number: str = Field(unique=True, index=True, max_length=20)
-    type: str | None = Field(default=None, max_length=50)  # e.g., mobile, home, work
-    person_id: Optional[uuid.UUID] = Field(default=None, foreign_key="person.id")
+    is_verified: bool = Field(default=False)
+    type: Optional[str] = Field(default=None, max_length=50)
+    more_info: Optional[str] = Field(default=None, max_length=255)
+    owner_type: Optional[str] = Field(default="profile", max_length=50)  # e.g., 'profile','provider','agency'
+    owner_id: Optional[uuid.UUID] = Field(default=None)
 
 
 class PhoneNumberCreate(PhoneNumberBase):
     pass
-    # No additional fields required for creation
 
 
-class PhoneNumberUpdate(PhoneNumberBase):
-    number: str | None = Field(default=None, max_length=20)
-    type: str | None = Field(default=None, max_length=50)
-    person_id: Optional[uuid.UUID] = Field(default=None, foreign_key="person.id")
+class PhoneNumberUpdate(SQLModel):
+    number: Optional[str] = Field(default=None, max_length=20)
+    is_verified: Optional[bool] = None
+    type: Optional[str] = None
+    more_info: Optional[str] = None
+    owner_type: Optional[str] = None
+    owner_id: Optional[uuid.UUID] = None
 
 
 class PhoneNumber(PhoneNumberBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_at: Optional[str] = Field(default=None)
-    person: Optional["Person"] = Relationship(back_populates="phone")
 
 
 class PhoneNumberPublic(PhoneNumberBase):

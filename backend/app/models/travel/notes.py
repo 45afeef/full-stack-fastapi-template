@@ -19,7 +19,7 @@ class PhoneNote(SQLModel, table=True):
 
 
 class ProfileNote(SQLModel, table=True):
-    profile_id: UUID = Field(foreign_key="userprofile.id", primary_key=True)
+    profile_id: UUID = Field(foreign_key="profile.id", primary_key=True)
     note_id: UUID = Field(foreign_key="note.id", primary_key=True)
 
 
