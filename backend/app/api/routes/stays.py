@@ -48,6 +48,11 @@ def create_stay_unit(*, provider_id: uuid.UUID, session: SessionDep, unit: StayU
 
 @router.post("/agencies", response_model=AgencyCreate, dependencies=[Depends(get_current_active_superuser)])
 def create_agency(*, session: SessionDep, agency: AgencyCreate) -> Any:
+    # Found a bug - 500 error when suppling user id not existing in User table
+    user = session.get(User, agency.created_by)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found for created_by")
+
     agency_obj = crud.create_travel_agency(session=session, agency=agency.model_dump())
     return agency_obj
 
