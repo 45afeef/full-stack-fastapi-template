@@ -1,7 +1,7 @@
 from  typing import TYPE_CHECKING
 
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Relationship
 
 from .enums import ServiceProviderType
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class ServiceProvider(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     provider_type: ServiceProviderType = Field(nullable=False)
     provider_name: str = Field(nullable=False)
     location_id: Optional[UUID] = Field(default=None, foreign_key="location.id")
@@ -34,7 +34,7 @@ class StayServiceProvider(SQLModel, table=True):
 
 
 class TravelAgency(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     agency_name: str = Field(nullable=False)
     contact_email: Optional[str] = Field(default=None)
     location_id: Optional[UUID] = Field(default=None, foreign_key="location.id")
@@ -43,7 +43,7 @@ class TravelAgency(SQLModel, table=True):
 
 
 class TravelAgencyStaff(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     user_id: UUID = Field(foreign_key="user.id")
     travel_agency_id: UUID = Field(foreign_key="travelagency.id")
     role: Optional[str] = Field(default=None)
