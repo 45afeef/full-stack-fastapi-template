@@ -1,5 +1,7 @@
 from typing import Optional, List
 from uuid import UUID
+
+from pydantic import EmailStr
 from sqlmodel import SQLModel
 from datetime import datetime
 
@@ -39,7 +41,7 @@ class StayUnitPublic(SQLModel):
 
 class AgencyCreate(SQLModel):
     agency_name: str
-    contact_email: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
     location_id: Optional[UUID] = None
     created_by: UUID
 

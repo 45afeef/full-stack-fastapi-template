@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import col, delete, func, select
 
 from app import crud
@@ -162,13 +162,22 @@ def read_user_by_id(
     Get a specific user by id.
     """
     user = session.get(User, user_id)
+    
     if user == current_user:
         return user
+
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=403,
             detail="The user doesn't have enough privileges",
         )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
     return user
 
 
