@@ -43,6 +43,11 @@ class AgencyCreate(SQLModel):
     location_id: Optional[UUID] = None
     created_by: UUID
 
+class AgencyPublic(SQLModel):
+    id: UUID
+    agency_name: str
+    contact_email: Optional[str] = None
+    location_id: Optional[UUID] = None
 
 class AgencyStaffCreate(SQLModel):
     user_id: UUID

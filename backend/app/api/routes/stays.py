@@ -15,6 +15,7 @@ from app.schemas.stays import (
     StayUnitCreate,
     StayUnitPublic,
     AgencyCreate,
+    AgencyPublic,
     AgencyStaffCreate,
     UnitFilterParams,
     UnitsList,
@@ -46,7 +47,7 @@ def create_stay_unit(*, provider_id: uuid.UUID, session: SessionDep, unit: StayU
     return created
 
 
-@router.post("/agencies", response_model=AgencyCreate, dependencies=[Depends(get_current_active_superuser)])
+@router.post("/agencies", response_model=AgencyPublic, dependencies=[Depends(get_current_active_superuser)])
 def create_agency(*, session: SessionDep, agency: AgencyCreate) -> Any:
     # Found a bug - 500 error when suppling user id not existing in User table
     user = session.get(User, agency.created_by)

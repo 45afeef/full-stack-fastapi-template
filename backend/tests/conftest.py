@@ -7,7 +7,7 @@ from sqlmodel import Session, delete
 from app.core.config import settings
 from app.core.db import engine, init_db
 from app.main import app
-from app.models import User
+from app.models import *
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
 
@@ -18,6 +18,40 @@ def db() -> Generator[Session, None, None]:
         init_db(session)
         yield session
         # Item model removed; cleanup for other models happens elsewhere
+
+        # Cleanup Database After Tests
+
+        # Needs to cleanup the database
+        # Deleting all the tables
+
+        # Now add cleanup for all models
+
+        statement = delete(EnquiryDetails)
+        session.execute(statement)
+
+        # Delete Stay Units first due to foreign key constraints
+        statement = delete(StayUnit)
+        session.execute(statement)
+        statement = delete(StayServiceProvider)
+        session.execute(statement)
+        # Delete Cab Service Providers
+        statement = delete(CabServiceProvider)
+        session.execute(statement)
+        # Delete Service Providers
+        statement = delete(StayServiceProvider)
+        session.execute(statement)
+        statement = delete(CabServiceProvider)
+        session.execute(statement)
+        statement = delete(ServiceProvider)
+        session.execute(statement)
+
+        
+        statement = delete(TravelAgencyStaff)
+        session.execute(statement)        
+
+        statement = delete(TravelAgency)
+        session.execute(statement)
+
         statement = delete(User)
         session.execute(statement)
         session.commit()
