@@ -136,10 +136,6 @@ class TestLoginTestToken:
             f"{settings.API_V1_STR}/login/test-token",
             headers=headers,
         )
-        print('the result afeef',r)
-        print('the result afeef',r.json())
-
-        
         
         assert r.status_code in (401, 403)
 
