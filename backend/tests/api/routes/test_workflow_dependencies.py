@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
-from app.models.travel.providers import ServiceProvider, TravelAgency, TravelAgencyStaff
+from app.models.travel.providers import ServiceProvider
 from app.models.travel.enums import ServiceProviderType
 from app.models.travel.stay import StayUnit
 from tests.utils.utils import random_email, random_lower_string
@@ -49,7 +49,7 @@ class TestUserToAgencyToStaffWorkflow:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies",
+            f"{settings.API_V1_STR}/travel-agency",
             headers=superuser_token_headers,
             json=agency_data,
         )
@@ -64,7 +64,7 @@ class TestUserToAgencyToStaffWorkflow:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies/{agency_id}/staffs",
+            f"{settings.API_V1_STR}/travel-agency/{agency_id}/staffs",
             headers=superuser_token_headers,
             json=staff_data,
         )
@@ -103,7 +103,7 @@ class TestUserToAgencyToStaffWorkflow:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies",
+            f"{settings.API_V1_STR}/travel-agency",
             headers=superuser_token_headers,
             json=agency_data,
         )
@@ -130,7 +130,7 @@ class TestUserToAgencyToStaffWorkflow:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies/{uuid.uuid4()}/staffs",
+            f"{settings.API_V1_STR}/travel-agency/{uuid.uuid4()}/staffs",
             headers=superuser_token_headers,
             json=staff_data,
         )
@@ -158,10 +158,7 @@ class TestUserToAgencyToStaffWorkflow:
         user_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
         # User should not be able to list stay units (not agency staff)
-        r = client.get(
-            f"{settings.API_V1_STR}/stays/units",
-            headers=user_headers,
-        )
+        r = client.get(f"{settings.API_V1_STR}/stays/units", headers=user_headers)
         assert r.status_code == 403
         assert r.json()["detail"] == "Not authorized to query stay units"
 
@@ -273,7 +270,7 @@ class TestComplexWorkflowWithMultipleEntities:
             }
 
             r = client.post(
-                f"{settings.API_V1_STR}/stays/agencies",
+                f"{settings.API_V1_STR}/travel-agency",
                 headers=superuser_token_headers,
                 json=agency_data,
             )
@@ -308,7 +305,7 @@ class TestComplexWorkflowWithMultipleEntities:
             }
 
             r = client.post(
-                f"{settings.API_V1_STR}/stays/agencies/{agency['id']}/staffs",
+                f"{settings.API_V1_STR}/travel-agency/{agency['id']}/staffs",
                 headers=superuser_token_headers,
                 json=staff_data,
             )
@@ -368,7 +365,7 @@ class TestComplexWorkflowWithMultipleEntities:
             "created_by": str(user.id),
         }
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies",
+            f"{settings.API_V1_STR}/travel-agency",
             headers=superuser_token_headers,
             json=agency_data,
         )
@@ -378,7 +375,7 @@ class TestComplexWorkflowWithMultipleEntities:
         # Assign staff
         staff_data = {"user_id": str(user.id), "role": "agent"}
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies/{agency['id']}/staffs",
+            f"{settings.API_V1_STR}/travel-agency/{agency['id']}/staffs",
             headers=superuser_token_headers,
             json=staff_data,
         )
@@ -470,7 +467,7 @@ class TestWorkflowErrorHandling:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies",
+            f"{settings.API_V1_STR}/travel-agency",
             headers=superuser_token_headers,
             json=agency_data,
         )
@@ -489,7 +486,7 @@ class TestWorkflowErrorHandling:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies",
+            f"{settings.API_V1_STR}/travel-agency",
             headers=superuser_token_headers,
             json=agency_data,
         )
@@ -522,7 +519,7 @@ class TestWorkflowErrorHandling:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/agencies",
+            f"{settings.API_V1_STR}/travel-agency",
             headers=user_headers,
             json=agency_data,
         )
