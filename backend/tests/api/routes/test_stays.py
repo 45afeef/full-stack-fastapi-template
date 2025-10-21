@@ -30,14 +30,4 @@ def test_list_units_as_superuser(
     assert isinstance(payload["count"], int)
 
 
-def test_create_agency_requires_superuser(
-    client: TestClient, normal_user_token_headers: dict[str, str]
-) -> None:
-    r = client.post(
-        f"{settings.API_V1_STR}/stays/agencies",
-        headers=normal_user_token_headers,
-        json={"name": "ACME Travel", "created_by": str(uuid.uuid4())},
-    )
-    assert r.status_code in (401, 403)
-
 

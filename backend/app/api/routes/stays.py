@@ -20,6 +20,7 @@ from app.schemas.stays import (
     UnitFilterParams,
     UnitsList,
 )
+from app.api.routes.agency import is_agency_staff
 
 router = APIRouter(prefix="/stays", tags=["stays"])
 
@@ -47,40 +48,7 @@ def create_stay_unit(*, provider_id: uuid.UUID, session: SessionDep, unit: StayU
     return created
 
 
-@router.post("/agencies", response_model=AgencyPublic, dependencies=[Depends(get_current_active_superuser)])
-def create_agency(*, session: SessionDep, agency: AgencyCreate) -> Any:
-    # Found a bug - 500 error when suppling user id not existing in User table
-    user = session.get(User, agency.created_by)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found for created_by")
 
-    agency_obj = crud.create_travel_agency(session=session, agency=agency.model_dump())
-    return agency_obj
-
-
-@router.post("/agencies/{agency_id}/staffs", dependencies=[Depends(get_current_active_superuser)])
-def assign_agency_staff(*, agency_id: uuid.UUID, session: SessionDep, staff: AgencyStaffCreate) -> Any:
-    # ensure agency exists
-    from app.models.travel.providers import TravelAgency
-
-    agency = session.get(TravelAgency, agency_id)
-    if not agency:
-        raise HTTPException(status_code=404, detail="Agency not found")
-    staff_data = staff.model_dump()
-    from app.models.travel.providers import TravelAgencyStaff as TAS
-
-    staff_obj = TAS(**staff_data, travel_agency_id=agency_id)
-    created = crud.assign_agency_staff(session=session, staff=staff_obj)
-    return created
-
-
-def _is_agency_staff(session: Session, user: User) -> bool:
-    from sqlmodel import select
-    from app.models.travel.providers import TravelAgencyStaff
-
-    statement = select(TravelAgencyStaff).where(TravelAgencyStaff.user_id == user.id)
-    found = session.exec(statement).first()
-    return found is not None
 
 
 @router.get("/units", response_model=UnitsList)
@@ -96,7 +64,7 @@ def list_stay_units(
     offset: int = Query(default=0, ge=0),
 ) -> Any:
     """Agency staff: list available stay units with filtering and pagination."""
-    if not current_user.is_superuser and not _is_agency_staff(session, current_user):
+    if not current_user.is_superuser and not is_agency_staff(session, current_user):
         raise HTTPException(status_code=403, detail="Not authorized to query stay units")
 
     units, count = crud.list_stay_units(
