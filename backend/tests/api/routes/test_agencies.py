@@ -4,11 +4,13 @@ Tests for agency endpoints (creation and staff assignment).
 import uuid
 
 from fastapi.testclient import TestClient
+
 from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
+from app.models.travel.enums import StaffRole
 from tests.utils.utils import random_email, random_lower_string
 
 
@@ -135,17 +137,18 @@ class TestAssignAgencyStaff:
         }
         agency = crud.create_travel_agency(session=db, agency=agency_data)
 
-        staff_data = {"user_id": str(user2.id), "role": "agent"}
+        staff_data = {"user_id": str(user2.id), "role": StaffRole.OWNER}
 
         r = client.post(
             f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
             headers=superuser_token_headers,
             json=staff_data,
         )
+        
         assert r.status_code == 200
         created_staff = r.json()
         assert created_staff["user_id"] == str(user2.id)
-        assert created_staff["role"] == "agent"
+        assert created_staff["role"] == "OWNER"
         assert "id" in created_staff
 
     def test_assign_agency_staff_agency_not_found(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session) -> None:
@@ -154,7 +157,7 @@ class TestAssignAgencyStaff:
         user_in = UserCreate(email=username, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
-        staff_data = {"user_id": str(user.id), "role": "agent"}
+        staff_data = {"user_id": str(user.id), "role": "AGENT"}
 
         r = client.post(
             f"{settings.API_V1_STR}/travel-agency/{uuid.uuid4()}/staffs",
@@ -164,18 +167,32 @@ class TestAssignAgencyStaff:
         assert r.status_code == 404
         assert r.json()["detail"] == "Agency not found"
 
-    def test_assign_agency_staff_requires_superuser(self, client: TestClient, normal_user_token_headers: dict[str, str]) -> None:
-        staff_data = {"user_id": str(uuid.uuid4()), "role": "agent"}
+    def test_assign_agency_staff_requires_superuser(self, client: TestClient, normal_user_token_headers: dict[str, str], db:Session) -> None:
+        username = random_email()
+        password = random_lower_string()
+        user_in = UserCreate(email=username, password=password)
+        user = crud.create_user(session=db, user_create=user_in)
+
+        agency_data = {
+            "agency_name": "ACME Travel Agency",
+            "contact_email": "acme@example.com",
+            "created_by": user.id,
+        }
+        agency_data = crud.create_travel_agency(session=db, agency=agency_data)
+        staff_data = {"user_id": str(user.id), "role": StaffRole.AGENT}
 
         r = client.post(
-            f"{settings.API_V1_STR}/travel-agency/{uuid.uuid4()}/staffs",
+            f"{settings.API_V1_STR}/travel-agency/{agency_data.id}/staffs",
             headers=normal_user_token_headers,
             json=staff_data,
         )
+
         assert r.status_code == 403
+        assert r.json()["detail"] == "Not authorized to assign staff"        
+
 
     def test_assign_agency_staff_no_auth(self, client: TestClient) -> None:
-        staff_data = {"user_id": str(uuid.uuid4()), "role": "agent"}
+        staff_data = {"user_id": str(uuid.uuid4()), "role": "SUPPORT"}
 
         r = client.post(
             f"{settings.API_V1_STR}/travel-agency/{uuid.uuid4()}/staffs",
@@ -184,7 +201,7 @@ class TestAssignAgencyStaff:
         assert r.status_code == 401
 
     def test_assign_agency_staff_missing_user_id(self, client: TestClient, superuser_token_headers: dict[str, str]) -> None:
-        staff_data = {"role": "agent"}
+        staff_data = {"role": "OWNER"}
 
         r = client.post(
             f"{settings.API_V1_STR}/travel-agency/{uuid.uuid4()}/staffs",
