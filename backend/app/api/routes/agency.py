@@ -8,7 +8,7 @@ from app.api.deps import SessionDep, get_current_active_superuser, get_current_u
 from app import crud
 from app.models import User
 from app.models.travel.providers import TravelAgency, TravelAgencyStaff
-from app.schemas.stays import (
+from app.schemas.agency import (
     AgencyCreate,
     AgencyPublic,
     AgencyStaffCreate,
