@@ -37,6 +37,7 @@ class AmenityScope(str, Enum):
 
 
 class StaffRole(str, Enum):
+    OWNER = "OWNER"
     AGENT = "AGENT"
     MANAGER = "MANAGER"
     SUPPORT = "SUPPORT"

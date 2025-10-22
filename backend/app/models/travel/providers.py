@@ -4,7 +4,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Relationship
 
-from .enums import ServiceProviderType
+from .enums import ServiceProviderType, StaffRole
 
 if TYPE_CHECKING:
     from app.models.user.user import User
@@ -46,7 +46,7 @@ class TravelAgencyStaff(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     user_id: UUID = Field(foreign_key="user.id")
     travel_agency_id: UUID = Field(foreign_key="travelagency.id")
-    role: Optional[str] = Field(default=None)
+    role: Optional[StaffRole] = Field(default=None)
     joined_at: Optional[str] = Field(default=None)
     resigned_at: Optional[str] = Field(default=None)
     resigning_reason: Optional[str] = Field(default=None)

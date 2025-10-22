@@ -2,6 +2,7 @@
 Workflow tests that test the dependencies between different API endpoints.
 These tests ensure that the proper order of operations is maintained.
 """
+import random
 import uuid
 from typing import Dict, Any
 
@@ -12,7 +13,7 @@ from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
 from app.models.travel.providers import ServiceProvider
-from app.models.travel.enums import ServiceProviderType
+from app.models.travel.enums import ServiceProviderType, StaffRole
 from app.models.travel.stay import StayUnit
 from tests.utils.utils import random_email, random_lower_string
 
@@ -60,7 +61,7 @@ class TestUserToAgencyToStaffWorkflow:
         # Step 3: Assign staff to agency (requires both user2 and agency to exist)
         staff_data = {
             "user_id": str(user2.id),
-            "role": "agent",
+            "role": "SUPPORT",
         }
 
         r = client.post(
@@ -126,7 +127,7 @@ class TestUserToAgencyToStaffWorkflow:
         # Try to assign staff to non-existent agency
         staff_data = {
             "user_id": str(user.id),
-            "role": "agent",
+            "role": "AGENT",
         }
 
         r = client.post(
@@ -301,7 +302,7 @@ class TestComplexWorkflowWithMultipleEntities:
         for i, (agency, user_data) in enumerate(zip(agencies, users[1:], strict=False)):
             staff_data = {
                 "user_id": str(user_data["user"].id),
-                "role": f"agent_{i+1}",
+                "role": random.choice(StaffRole._member_names_),
             }
 
             r = client.post(
@@ -373,7 +374,7 @@ class TestComplexWorkflowWithMultipleEntities:
         agency = r.json()
 
         # Assign staff
-        staff_data = {"user_id": str(user.id), "role": "agent"}
+        staff_data = {"user_id": str(user.id), "role": StaffRole.MANAGER}
         r = client.post(
             f"{settings.API_V1_STR}/travel-agency/{agency['id']}/staffs",
             headers=superuser_token_headers,

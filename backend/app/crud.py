@@ -113,6 +113,45 @@ def assign_agency_staff(*, session: Session, staff: dict | TravelAgencyStaff) ->
     return obj
 
 
+def get_travel_agency(*, session: Session, agency_id: str) -> TravelAgency | None:
+    return session.get(TravelAgency, agency_id)
+
+
+def list_travel_agencies(*, session: Session, limit: int = 100, offset: int = 0) -> list[TravelAgency]:
+    statement = select(TravelAgency).offset(offset).limit(limit)
+    return session.exec(statement).all()
+
+
+def update_travel_agency(*, session: Session, db_agency: TravelAgency, agency_in: dict) -> TravelAgency:
+    db_agency.sqlmodel_update(agency_in, update={})
+    session.add(db_agency)
+    session.commit()
+    session.refresh(db_agency)
+    return db_agency
+
+
+def delete_travel_agency(*, session: Session, db_agency: TravelAgency) -> None:
+    session.delete(db_agency)
+    session.commit()
+
+
+def get_agency_staff(*, session: Session, staff_id: str) -> TravelAgencyStaff | None:
+    return session.get(TravelAgencyStaff, staff_id)
+
+
+def update_agency_staff(*, session: Session, db_staff: TravelAgencyStaff, staff_in: dict) -> TravelAgencyStaff:
+    db_staff.sqlmodel_update(staff_in, update={})
+    session.add(db_staff)
+    session.commit()
+    session.refresh(db_staff)
+    return db_staff
+
+
+def remove_agency_staff(*, session: Session, db_staff: TravelAgencyStaff) -> None:
+    session.delete(db_staff)
+    session.commit()
+
+
 def list_stay_units(
     *,
     session: Session,
