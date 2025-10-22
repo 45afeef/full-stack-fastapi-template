@@ -9,15 +9,13 @@ from app import crud
 from app.models import User
 from app.models.travel.stay import StayUnit
 from app.models.travel.providers import ServiceProvider
-from app.schemas.stays import (
+from app.schemas.provider import (
     ProviderCreate,
     ProviderPublic,
+)
+from app.schemas.provider.stays import (
     StayUnitCreate,
     StayUnitPublic,
-    AgencyCreate,
-    AgencyPublic,
-    AgencyStaffCreate,
-    UnitFilterParams,
     UnitsList,
 )
 from app.api.routes.agency import is_agency_staff
@@ -46,9 +44,6 @@ def create_stay_unit(*, provider_id: uuid.UUID, session: SessionDep, unit: StayU
     unit_obj = StayUnit(**unit_data, provider_id=provider_id)
     created = crud.create_stay_unit(session=session, unit=unit_obj)
     return created
-
-
-
 
 
 @router.get("/units", response_model=UnitsList)
