@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
 from app.models import User, UserCreate, UserUpdate
+from app.models.travel.cab import Cab, Driver
 from app.models.travel.providers import (
     ServiceProvider,
     StayServiceProvider,
@@ -185,3 +186,84 @@ def list_stay_units(
     results = session.exec(statement.offset(offset).limit(limit)).all()
     count = len(results) if total is None else total
     return results, count
+
+
+def delete_service_provider(*, session: Session, db_provider: ServiceProvider) -> None:
+    # remove related stay units and amenities
+    try:
+        statement = select(StayUnit).where(StayUnit.provider_id == db_provider.id)
+        units = session.exec(statement).all()
+        for u in units:
+            # delete amenities linked to unit
+            statement_a = select(StayAmenity).where(StayAmenity.stay_unit_id == u.id)
+            amenities = session.exec(statement_a).all()
+            for a in amenities:
+                session.delete(a)
+            session.delete(u)
+
+        # remove cab and driver rows
+        try:
+            from app.models.travel.cab import Cab, Driver
+
+            statement_c = select(Cab).where(Cab.provider_id == db_provider.id)
+            cabs = session.exec(statement_c).all()
+            for c in cabs:
+                session.delete(c)
+            statement_d = select(Driver).where(Driver.provider_id == db_provider.id)
+            drivers = session.exec(statement_d).all()
+            for d in drivers:
+                session.delete(d)
+        except Exception:
+            # cab models may not be present in some states; ignore if not available
+            pass
+
+        # remove provider-specific rows
+        try:
+            from app.models.travel.providers import StayServiceProvider, CabServiceProvider
+
+            ssp = session.get(StayServiceProvider, db_provider.id)
+            if ssp:
+                session.delete(ssp)
+            csp = session.get(CabServiceProvider, db_provider.id)
+            if csp:
+                session.delete(csp)
+        except Exception:
+            pass
+
+        session.delete(db_provider)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+
+def create_cab(*, session: Session, cab: dict | Cab) -> Cab:
+    if isinstance(cab, dict):
+        obj = Cab(**cab)
+    else:
+        obj = cab
+    session.add(obj)
+    session.commit()
+    session.refresh(obj)
+    return obj
+
+
+def list_cabs(*, session: Session, provider_id: str, limit: int = 100, offset: int = 0):
+    statement = select(Cab).where(Cab.provider_id == provider_id).offset(offset).limit(limit)
+    return session.exec(statement).all()
+
+
+def create_driver(*, session: Session, driver: dict | Driver) -> Driver:
+    if isinstance(driver, dict):
+        obj = Driver(**driver)
+    else:
+        obj = driver
+    session.add(obj)
+    session.commit()
+    session.refresh(obj)
+    return obj
+
+
+def list_drivers(*, session: Session, provider_id: str, limit: int = 100, offset: int = 0):
+    statement = select(Driver).where(Driver.provider_id == provider_id).offset(offset).limit(limit)
+    return session.exec(statement).all()
