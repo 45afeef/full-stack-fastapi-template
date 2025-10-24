@@ -8,24 +8,50 @@ from app import crud
 from app.models import User
 from app.models.travel.providers import ServiceProvider
 from app.schemas.provider import ProviderCreate, ProviderPublic
+from app.models.travel.providers import CabServiceProvider, StayServiceProvider
 
-router = APIRouter()
+router = APIRouter(tags=["providers"]) 
 
 
 def _is_provider_owner(session: Session, user: User, provider: ServiceProvider) -> bool:
     return provider.owner_id == user.id
 
 
-@router.post("/", response_model=ProviderPublic, dependencies=[Depends(get_current_active_superuser)],)
-def create_provider(*, session: SessionDep, provider: ProviderCreate) -> Any:
+@router.post(
+    "/", 
+    response_model=ProviderPublic,
+    dependencies=[Depends(get_current_active_superuser)],
+    status_code=201,
+)
+def create_provider(*, session: SessionDep, provider_in: ProviderCreate) -> Any:
     """Superuser: create a service provider."""
-    # validate created_by user
-    user = session.get(User, provider.created_by)
-    if not user:
+    # validate users
+    create_by_user = session.get(User, provider_in.created_by)
+    if not create_by_user:
         raise HTTPException(status_code=404, detail="User not found for created_by")
-    sp = ServiceProvider(**provider.model_dump())
-    created = crud.create_service_provider(session=session, provider=sp)
-    return created
+    owner_user = session.get(User, provider_in.owner_id)
+    if not owner_user:
+        raise HTTPException(status_code=404, detail="User not found for owner_id")
+    
+    # validation completes now create the service provider
+    sp = ServiceProvider(**provider_in.model_dump())
+    provider = crud.create_service_provider(session=session, provider=sp)
+    
+    if provider_in.provider_type == "CAB":
+        cab = CabServiceProvider(provider_id=provider.id)
+        session.add(cab)
+
+    elif provider_in.provider_type == "STAY":
+        stay = StayServiceProvider(
+            provider_id=provider.id,
+            property_type=provider_in.property_type,
+            room_count=provider_in.room_count,
+        )
+        session.add(stay)
+
+    session.commit()
+    session.refresh(provider)
+    return provider
 
 
 @router.get("/", response_model=list[ProviderPublic])

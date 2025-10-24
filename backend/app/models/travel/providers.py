@@ -6,10 +6,6 @@ from sqlmodel import SQLModel, Field, Relationship
 
 from .enums import ServiceProviderType, StaffRole
 
-if TYPE_CHECKING:
-    from app.models.user.user import User
-
-
 
 class ServiceProvider(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -20,10 +16,14 @@ class ServiceProvider(SQLModel, table=True):
     created_by: UUID = Field(foreign_key="user.id")
     created_at: Optional[str] = Field(default=None)
 
+    cab_provider: Optional["CabServiceProvider"] = Relationship(back_populates="provider")
+    stay_provider: Optional["StayServiceProvider"] = Relationship(back_populates="provider")
 
 class CabServiceProvider(SQLModel, table=True):
     provider_id: UUID = Field(primary_key=True, foreign_key="serviceprovider.id")
     updated_at: Optional[str] = Field(default=None)
+
+    provider: "ServiceProvider" = Relationship(back_populates="cab_provider")
 
 
 class StayServiceProvider(SQLModel, table=True):
@@ -32,6 +32,7 @@ class StayServiceProvider(SQLModel, table=True):
     room_count: Optional[int] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
 
+    provider: "ServiceProvider" = Relationship(back_populates="stay_provider")
 
 class TravelAgency(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)

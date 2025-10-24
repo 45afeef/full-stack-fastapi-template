@@ -16,7 +16,8 @@ class CabPublic(SQLModel):
 
 
 class DriverCreate(SQLModel):
-    user_id: UUID
+    user_id: UUID = None
+    profile_id: UUID
 
 
 class DriverPublic(SQLModel):

@@ -18,16 +18,6 @@ def _is_provider_owner(session: Session, user: User, provider: ServiceProvider) 
     return provider.owner_id == user.id
 
 
-@router.post("/", response_model=StayServiceProvider, dependencies=[Depends(get_current_active_superuser)])
-def create_stay_provider(*, provider_id: uuid.UUID, session: SessionDep) -> Any:
-    """Admin: create a stay-specific provider row for an existing provider."""
-    provider = session.get(ServiceProvider, provider_id)
-    if not provider:
-        raise HTTPException(status_code=404, detail="Provider not found")
-    created = crud.create_stay_provider_row(session=session, provider_id=provider_id)
-    return created
-
-
 @router.post("/units", response_model=StayUnitPublic, dependencies=[Depends(get_current_active_superuser)])
 def create_stay_unit(*, provider_id: uuid.UUID, session: SessionDep, unit: StayUnitCreate,) -> Any:
     provider = session.get(ServiceProvider, provider_id)

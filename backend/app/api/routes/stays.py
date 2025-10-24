@@ -2,11 +2,9 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session
 
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app import crud
-from app.models import User
 from app.models.travel.stay import StayUnit
 from app.models.travel.providers import ServiceProvider
 from app.schemas.provider import (

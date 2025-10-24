@@ -49,6 +49,9 @@ def list_cabs(*, provider_id: uuid.UUID, session: SessionDep, current_user: Curr
     return crud.list_cabs(session=session, provider_id=str(provider_id), limit=limit, offset=offset)
 
 
+# TODO - resolve user_id/profile_id relationship
+# http error 422 if driver data is invalid
+# add tests for profile endpoints
 @router.post(
     "/drivers", 
     response_model=DriverPublic,

@@ -35,6 +35,10 @@ def db() -> Generator[Session, None, None]:
         statement = delete(StayServiceProvider)
         session.execute(statement)
         # Delete Cab Service Providers
+        statement = delete(Cab)
+        session.execute(statement)
+        statement = delete(Driver)
+        session.execute(statement)
         statement = delete(CabServiceProvider)
         session.execute(statement)
         # Delete Service Providers

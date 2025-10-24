@@ -2,6 +2,8 @@ from typing import TYPE_CHECKING, Optional
 import uuid
 from datetime import date
 
+from pydantic import EmailStr
+
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -20,6 +22,11 @@ class ProfileBase(SQLModel):
     state: Optional[str] = Field(default=None, max_length=100)
     zip_code: Optional[str] = Field(default=None, max_length=20)
     country: Optional[str] = Field(default=None, max_length=100)
+    primary_phone_number: Optional[str] = Field(unique=True, index=True, max_length=20)
+    secondary_phone_number: Optional[str] = Field(default=None, unique=True, index=True, max_length=20)
+    primary_email: Optional[EmailStr] = Field(default=None, unique=True, index=True, max_length=100)
+    secondary_email: Optional[EmailStr] = Field(default=None, unique=True, index=True, max_length=100)
+    created_by_user_id: Optional[uuid.UUID] = Field(default=None)
 
 
 class ProfileCreate(ProfileBase):
