@@ -24,7 +24,7 @@ def test_create_and_delete_provider_workflow(client: TestClient, superuser_token
     }
 
     r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
-    assert r.status_code == 200
+    assert r.status_code == 201
     provider = r.json()
     provider_id = provider["id"]
 
