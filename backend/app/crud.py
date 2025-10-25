@@ -253,6 +253,33 @@ def list_cabs(*, session: Session, provider_id: str, limit: int = 100, offset: i
     return session.exec(statement).all()
 
 
+def list_cabs_query(
+    *,
+    session: Session,
+    provider_id: str | None = None,
+    provider_ids: list[str] | None = None,
+    vehicle_type: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """More flexible cab listing used by query endpoints.
+
+    - provider_id: single provider id
+    - provider_ids: list of provider ids to include
+    - vehicle_type: filter by vehicle_type (string)
+    """
+    statement = select(Cab)
+    if provider_id:
+        statement = statement.where(Cab.provider_id == provider_id)
+    if provider_ids:
+        statement = statement.where(Cab.provider_id.in_(provider_ids))
+    if vehicle_type:
+        statement = statement.where(Cab.vehicle_type == vehicle_type)
+    results = session.exec(statement.offset(offset).limit(limit)).all()
+    # count is approximate here
+    return results, len(results)
+
+
 def create_driver(*, session: Session, driver: dict | Driver) -> Driver:
     if isinstance(driver, dict):
         obj = Driver(**driver)
@@ -267,3 +294,145 @@ def create_driver(*, session: Session, driver: dict | Driver) -> Driver:
 def list_drivers(*, session: Session, provider_id: str, limit: int = 100, offset: int = 0):
     statement = select(Driver).where(Driver.provider_id == provider_id).offset(offset).limit(limit)
     return session.exec(statement).all()
+
+
+def list_drivers_query(
+    *,
+    session: Session,
+    provider_id: str | None = None,
+    provider_ids: list[str] | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """Flexible driver listing used by query endpoints."""
+    statement = select(Driver)
+    if provider_id:
+        statement = statement.where(Driver.provider_id == provider_id)
+    if provider_ids:
+        statement = statement.where(Driver.provider_id.in_(provider_ids))
+    results = session.exec(statement.offset(offset).limit(limit)).all()
+    return results, len(results)
+
+
+def _providers_within_bbox(session: Session, lat: float, lon: float, radius_km: float) -> list[str]:
+    """Return provider ids whose location falls within a simple bounding box around (lat, lon).
+
+    This is a fast pre-filter; callers can compute exact haversine distance later if needed.
+    """
+    # approximate degrees per km
+    import math
+
+    delta_lat = radius_km / 111.0
+    if abs(lat) >= 90:
+        delta_lon = 180.0
+    else:
+        delta_lon = radius_km / (111.320 * max(0.000001, math.cos(math.radians(lat))))
+
+    from app.models.travel.providers import ServiceProvider
+    from app.models.travel.location import Location
+    from sqlmodel import select as _select
+
+    stmt = (
+        _select(ServiceProvider.id)
+        .join(Location, ServiceProvider.location_id == Location.id)
+        .where(Location.latitude >= (lat - delta_lat))
+        .where(Location.latitude <= (lat + delta_lat))
+        .where(Location.longitude >= (lon - delta_lon))
+        .where(Location.longitude <= (lon + delta_lon))
+    )
+    rows = session.exec(stmt).all()
+    # rows may be list of ids or list of tuples depending on SQL backend; normalize
+    provider_ids = [str(r[0]) if isinstance(r, tuple) else str(r) for r in rows]
+    return provider_ids
+
+
+def list_stay_units_by_location(
+    *,
+    session: Session,
+    lat: float,
+    lon: float,
+    radius_km: float = 5.0,
+    amenity: str | None = None,
+    min_price: int | None = None,
+    max_price: int | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    sort_by_distance: bool = False,
+):
+    """Find stay units near a lat/lon within radius_km.
+
+    This performs a bbox prefilter using provider location, then fetches stay units for matching providers.
+    If sort_by_distance is True the results are sorted by haversine distance (computed in Python).
+    Returns (units, count).
+    """
+    import math
+
+    # get candidate provider ids using bbox
+    provider_ids = _providers_within_bbox(session=session, lat=lat, lon=lon, radius_km=radius_km)
+
+    # no providers nearby
+    if not provider_ids:
+        return [], 0
+
+    # reuse existing list_stay_units functionality but need to filter by provider_ids
+    from sqlmodel import select as _select
+    from app.models.travel.stay import StayUnit, StayAmenity
+    from app.models.travel.providers import ServiceProvider
+    from app.models.travel.location import Location
+
+    stmt = _select(StayUnit).where(StayUnit.provider_id.in_(provider_ids))
+    if min_price is not None:
+        stmt = stmt.where(StayUnit.room_rate >= min_price)
+    if max_price is not None:
+        stmt = stmt.where(StayUnit.room_rate <= max_price)
+    if amenity:
+        stmt = (
+            _select(StayUnit)
+            .join(StayAmenity, StayAmenity.stay_unit_id == StayUnit.id)
+            .where(StayAmenity.amenity == amenity)
+            .where(StayUnit.provider_id.in_(provider_ids))
+        )
+
+    results = session.exec(stmt).all()
+
+    # if sorting by distance is requested, compute distance per result using provider's location
+    if sort_by_distance and results:
+        # build map of provider_id -> (lat, lon)
+        stmt_loc = _select(ServiceProvider.id, Location.latitude, Location.longitude).join(Location, ServiceProvider.location_id == Location.id).where(ServiceProvider.id.in_(provider_ids))
+        loc_rows = session.exec(stmt_loc).all()
+        provider_loc = {}
+        for row in loc_rows:
+            # row may be tuple (id, lat, lon)
+            pid = str(row[0]) if isinstance(row, tuple) else str(row.id)
+            if isinstance(row, tuple):
+                provider_loc[pid] = (float(row[1]), float(row[2]))
+            else:
+                provider_loc[pid] = (float(row.latitude), float(row.longitude))
+
+        def haversine_km(a_lat, a_lon, b_lat, b_lon):
+            R = 6371.0
+            phi1 = math.radians(a_lat)
+            phi2 = math.radians(b_lat)
+            dphi = math.radians(b_lat - a_lat)
+            dlambda = math.radians(b_lon - a_lon)
+            aa = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+            return 2 * R * math.asin(math.sqrt(aa))
+
+        units_with_dist = []
+        for u in results:
+            pid = str(u.provider_id)
+            if pid in provider_loc:
+                plat, plon = provider_loc[pid]
+                d = haversine_km(lat, lon, plat, plon)
+            else:
+                d = float("inf")
+            units_with_dist.append((u, d))
+
+        units_with_dist.sort(key=lambda x: x[1])
+        sorted_units = [u for u, _ in units_with_dist]
+    else:
+        sorted_units = results
+
+    # slice for pagination
+    paged = sorted_units[offset : offset + limit]
+    return paged, len(sorted_units)

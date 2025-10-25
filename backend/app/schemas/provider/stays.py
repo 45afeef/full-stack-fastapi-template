@@ -31,6 +31,16 @@ class UnitsList(SQLModel):
     count: int
 
 
+class StayUnitWithDistance(StayUnitPublic):
+    # distance in kilometers from query point; optional so old clients keep working
+    distance_km: float | None = None
+
+
+class UnitsListWithDistance(SQLModel):
+    data: List[StayUnitWithDistance]
+    count: int
+
+
 __all__ = [
     "StayUnitCreate",
     "StayUnitPublic",
