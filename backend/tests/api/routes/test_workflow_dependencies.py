@@ -191,11 +191,11 @@ class TestProviderToUnitWorkflow:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers",
+            f"{settings.API_V1_STR}/providers",
             headers=superuser_token_headers,
             json=provider_data,
         )
-        assert r.status_code == 200
+        assert r.status_code == 201
         provider = r.json()
         provider_id = provider["id"]
 
@@ -208,7 +208,7 @@ class TestProviderToUnitWorkflow:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers/{provider_id}/units",
+            f"{settings.API_V1_STR}/providers/{provider_id}/stay/units",
             headers=superuser_token_headers,
             json=unit_data,
         )
@@ -232,7 +232,7 @@ class TestProviderToUnitWorkflow:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers/{uuid.uuid4()}/units",
+            f"{settings.API_V1_STR}/providers/{uuid.uuid4()}/stay/units",
             headers=superuser_token_headers,
             json=unit_data,
         )
@@ -290,11 +290,11 @@ class TestComplexWorkflowWithMultipleEntities:
             }
 
             r = client.post(
-                f"{settings.API_V1_STR}/stays/providers",
+                f"{settings.API_V1_STR}/providers",
                 headers=superuser_token_headers,
                 json=provider_data,
             )
-            assert r.status_code == 200
+            assert r.status_code == 201
             provider = r.json()
             providers.append(provider)
 
@@ -322,7 +322,7 @@ class TestComplexWorkflowWithMultipleEntities:
             }
 
             r = client.post(
-                f"{settings.API_V1_STR}/stays/providers/{provider['id']}/units",
+                f"{settings.API_V1_STR}/providers/{provider['id']}/stay/units",
                 headers=superuser_token_headers,
                 json=unit_data,
             )
@@ -390,11 +390,11 @@ class TestComplexWorkflowWithMultipleEntities:
             "created_by": str(user.id),
         }
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers",
+            f"{settings.API_V1_STR}/providers",
             headers=superuser_token_headers,
             json=provider_data,
         )
-        assert r.status_code == 200
+        assert r.status_code == 201
         provider = r.json()
 
         # Create multiple units with different prices
@@ -407,7 +407,7 @@ class TestComplexWorkflowWithMultipleEntities:
             }
 
             r = client.post(
-                f"{settings.API_V1_STR}/stays/providers/{provider['id']}/units",
+                f"{settings.API_V1_STR}/providers/{provider['id']}/stay/units",
                 headers=superuser_token_headers,
                 json=unit_data,
             )
@@ -528,14 +528,14 @@ class TestWorkflowErrorHandling:
 
         # Try to create provider (should fail - requires superuser)
         provider_data = {
-            "provider_type": "hotel",
+            "provider_type": "STAY",
             "provider_name": "Test Hotel",
             "owner_id": str(uuid.uuid4()),
             "created_by": str(uuid.uuid4()),
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers",
+            f"{settings.API_V1_STR}/providers/",
             headers=user_headers,
             json=provider_data,
         )

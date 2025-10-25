@@ -1,48 +1,16 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
+from app.api.deps import CurrentUser, SessionDep
 from app import crud
-from app.models.travel.stay import StayUnit
-from app.models.travel.providers import ServiceProvider
-from app.schemas.provider import (
-    ProviderCreate,
-    ProviderPublic,
-)
 from app.schemas.provider.stays import (
-    StayUnitCreate,
-    StayUnitPublic,
     UnitsList,
 )
 from app.api.routes.agency import is_agency_staff
 
 router = APIRouter(prefix="/stays", tags=["stays"])
-
-
-@router.post("/providers", response_model=ProviderPublic, dependencies=[Depends(get_current_active_superuser)])
-def create_stay_provider(*, session: SessionDep, provider: ProviderCreate) -> Any:
-    """Admin: create a service provider and a stay-specific provider record."""
-    provider_data = provider.model_dump()
-    sp = ServiceProvider(**provider_data)
-    created = crud.create_service_provider(session=session, provider=sp)
-    # create stay-specific row
-    crud.create_stay_provider_row(session=session, provider_id=created.id)
-    return created
-
-
-@router.post("/providers/{provider_id}/units", response_model=StayUnitPublic, dependencies=[Depends(get_current_active_superuser)])
-def create_stay_unit(*, provider_id: uuid.UUID, session: SessionDep, unit: StayUnitCreate) -> Any:
-    """Admin: create a stay unit for a provider."""
-    provider = session.get(ServiceProvider, provider_id)
-    if not provider:
-        raise HTTPException(status_code=404, detail="Provider not found")
-    unit_data = unit.model_dump()
-    unit_obj = StayUnit(**unit_data, provider_id=provider_id)
-    created = crud.create_stay_unit(session=session, unit=unit_obj)
-    return created
-
 
 @router.get("/units", response_model=UnitsList)
 def list_stay_units(

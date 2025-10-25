@@ -46,14 +46,14 @@ def test_stay_unit_permissions(client: TestClient, superuser_token_headers: dict
         "owner_id": str(user.id),
         "created_by": str(user.id),
     }
-    r = client.post(f"{settings.API_V1_STR}/stays/providers", headers=superuser_token_headers, json=provider_data)
-    assert r.status_code == 200
+    r = client.post(f"{settings.API_V1_STR}/providers", headers=superuser_token_headers, json=provider_data)
+    assert r.status_code == 201
     provider = r.json()
     provider_id = provider["id"]
 
     # create unit as superuser
     unit_data = {"name": "Room 1", "room_rate": 100}
-    r = client.post(f"{settings.API_V1_STR}/stays/providers/{provider_id}/units", headers=superuser_token_headers, json=unit_data)
+    r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/stay/units", headers=superuser_token_headers, json=unit_data)
     assert r.status_code == 200
 
     # normal user should not list units unless agency staff
