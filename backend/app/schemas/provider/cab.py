@@ -27,3 +27,16 @@ class DriverPublic(SQLModel):
 
 
 __all__ = ["CabCreate", "CabPublic", "DriverCreate", "DriverPublic"]
+
+
+class CabsList(SQLModel):
+    data: list[CabPublic]
+    count: int
+
+
+class DriversList(SQLModel):
+    data: list[DriverPublic]
+    count: int
+
+
+__all__ += ["CabsList", "DriversList"]

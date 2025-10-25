@@ -17,49 +17,23 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
-        # Item model removed; cleanup for other models happens elsewhere
-
         # Cleanup Database After Tests
-
-        # Needs to cleanup the database
-        # Deleting all the tables
-
-        # Now add cleanup for all models
-
-        statement = delete(EnquiryDetails)
-        session.execute(statement)
-
-        # Delete Stay Units first due to foreign key constraints
-        statement = delete(StayUnit)
-        session.execute(statement)
-        statement = delete(StayServiceProvider)
-        session.execute(statement)
-        # Delete Cab Service Providers
-        statement = delete(Cab)
-        session.execute(statement)
-        statement = delete(Driver)
-        session.execute(statement)
-        statement = delete(CabServiceProvider)
-        session.execute(statement)
-        # Delete Service Providers
-        statement = delete(StayServiceProvider)
-        session.execute(statement)
-        statement = delete(CabServiceProvider)
-        session.execute(statement)
-        statement = delete(ServiceProvider)
-        session.execute(statement)
-
-        
-        statement = delete(TravelAgencyStaff)
-        session.execute(statement)        
-
-        statement = delete(TravelAgency)
-        session.execute(statement)
-
-        statement = delete(User)
-        session.execute(statement)
+        # Truncate or rollback after each test
+        for model in [
+            EnquiryDetails,
+            StayAmenity,
+            StayUnit,
+            StayServiceProvider,
+            Cab,
+            Driver,
+            CabServiceProvider,
+            ServiceProvider,
+            TravelAgencyStaff,
+            TravelAgency,
+            User,
+        ]:
+            session.execute(delete(model))
         session.commit()
-
 
 @pytest.fixture(scope="module")
 def client() -> Generator[TestClient, None, None]:
