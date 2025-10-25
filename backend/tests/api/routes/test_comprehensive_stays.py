@@ -38,11 +38,11 @@ class TestCreateStayProvider:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers",
+            f"{settings.API_V1_STR}/providers",
             headers=superuser_token_headers,
             json=provider_data,
         )
-        assert r.status_code == 200
+        assert r.status_code == 201
         created_provider = r.json()
         assert created_provider["provider_name"] == "Test Hotel"
         assert created_provider["provider_type"] == "STAY"
@@ -60,7 +60,7 @@ class TestCreateStayProvider:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers",
+            f"{settings.API_V1_STR}/providers",
             headers=normal_user_token_headers,
             json=provider_data,
         )
@@ -75,7 +75,7 @@ class TestCreateStayProvider:
             "created_by": str(uuid.uuid4()),
         }
 
-        r = client.post(f"{settings.API_V1_STR}/stays/providers", json=provider_data)
+        r = client.post(f"{settings.API_V1_STR}/providers", json=provider_data)
         assert r.status_code == 401
 
     def test_create_stay_provider_missing_fields(
@@ -88,7 +88,7 @@ class TestCreateStayProvider:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers",
+            f"{settings.API_V1_STR}/providers",
             headers=superuser_token_headers,
             json=provider_data,
         )
@@ -106,7 +106,7 @@ class TestCreateStayProvider:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers",
+            f"{settings.API_V1_STR}/providers",
             headers=superuser_token_headers,
             json=provider_data,
         )
@@ -144,7 +144,7 @@ class TestCreateStayUnit:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers/{created_provider.id}/units",
+            f"{settings.API_V1_STR}/providers/{created_provider.id}/stay/units",
             headers=superuser_token_headers,
             json=unit_data,
         )
@@ -165,7 +165,7 @@ class TestCreateStayUnit:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers/{uuid.uuid4()}/units",
+            f"{settings.API_V1_STR}/providers/{uuid.uuid4()}/stay/units",
             headers=superuser_token_headers,
             json=unit_data,
         )
@@ -183,7 +183,7 @@ class TestCreateStayUnit:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers/{uuid.uuid4()}/units",
+            f"{settings.API_V1_STR}/providers/{uuid.uuid4()}/stay/units",
             headers=normal_user_token_headers,
             json=unit_data,
         )
@@ -198,7 +198,7 @@ class TestCreateStayUnit:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers/{uuid.uuid4()}/units",
+            f"{settings.API_V1_STR}/providers/{uuid.uuid4()}/stay/units",
             json=unit_data,
         )
         assert r.status_code == 401
@@ -213,7 +213,7 @@ class TestCreateStayUnit:
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/stays/providers/{uuid.uuid4()}/units",
+            f"{settings.API_V1_STR}/providers/{uuid.uuid4()}/stay/units",
             headers=superuser_token_headers,
             json=unit_data,
         )

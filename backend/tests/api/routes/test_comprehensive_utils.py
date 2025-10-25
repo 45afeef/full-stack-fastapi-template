@@ -115,7 +115,6 @@ class TestTestEmail:
                     f"{settings.API_V1_STR}/utils/test-email/?email_to={email}",
                     headers=superuser_token_headers,
                 )
-                print('the response',r.json())
                 assert r.status_code == 201
                 assert r.json() == {"message": "Test email sent"}
 
