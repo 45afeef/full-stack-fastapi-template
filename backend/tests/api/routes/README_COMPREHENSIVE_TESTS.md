@@ -43,7 +43,7 @@ This directory contains comprehensive tests for all API routes, including succes
 - `POST /stays/providers/{provider_id}/units` - Stay unit creation (superuser only)
 - `POST /stays/agencies` - Travel agency creation (superuser only)
 - `POST /stays/agencies/{agency_id}/staffs` - Agency staff assignment (superuser only)
-- `GET /stays/units` - Stay units listing (agency staff or superuser only)
+- `GET /query/units` - Stay units listing (agency staff or superuser only)
 
 **Test Coverage:**
 - ✅ Success scenarios (provider/agency/unit creation, staff assignment)

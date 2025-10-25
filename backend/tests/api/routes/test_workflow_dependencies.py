@@ -82,7 +82,7 @@ class TestUserToAgencyToStaffWorkflow:
 
         # Now user2 should be able to list stay units (as agency staff)
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units",
+            f"{settings.API_V1_STR}/query/units",
             headers=user2_headers,
         )
         assert r.status_code == 200
@@ -159,7 +159,7 @@ class TestUserToAgencyToStaffWorkflow:
         user_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
         # User should not be able to list stay units (not agency staff)
-        r = client.get(f"{settings.API_V1_STR}/stays/units", headers=user_headers)
+        r = client.get(f"{settings.API_V1_STR}/query/units", headers=user_headers)
         assert r.status_code == 403
         assert r.json()["detail"] == "Not authorized to query stay units"
 
@@ -340,7 +340,7 @@ class TestComplexWorkflowWithMultipleEntities:
             user_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
             r = client.get(
-                f"{settings.API_V1_STR}/stays/units",
+                f"{settings.API_V1_STR}/query/units",
                 headers=user_headers,
             )
             assert r.status_code == 200
@@ -422,7 +422,7 @@ class TestComplexWorkflowWithMultipleEntities:
 
         # Test filtering by price range
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units?min_price=120&max_price=180",
+            f"{settings.API_V1_STR}/query/units?min_price=120&max_price=180",
             headers=user_headers,
         )
         assert r.status_code == 200
@@ -431,7 +431,7 @@ class TestComplexWorkflowWithMultipleEntities:
 
         # Test pagination
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units?limit=2&offset=0",
+            f"{settings.API_V1_STR}/query/units?limit=2&offset=0",
             headers=user_headers,
         )
         assert r.status_code == 200
@@ -441,7 +441,7 @@ class TestComplexWorkflowWithMultipleEntities:
 
         # Test filtering by provider
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units?provider_id={provider['id']}",
+            f"{settings.API_V1_STR}/query/units?provider_id={provider['id']}",
             headers=user_headers,
         )
         assert r.status_code == 200

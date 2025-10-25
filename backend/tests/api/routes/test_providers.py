@@ -62,5 +62,5 @@ def test_stay_unit_permissions(client: TestClient, superuser_token_headers: dict
     tokens = r.json()
     user_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
-    r = client.get(f"{settings.API_V1_STR}/stays/units", headers=user_headers)
+    r = client.get(f"{settings.API_V1_STR}/query/units", headers=user_headers)
     assert r.status_code == 403

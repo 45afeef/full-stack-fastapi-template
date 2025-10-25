@@ -46,7 +46,7 @@ class TestComprehensiveAPICoverage:
                 "POST /stays/providers/{provider_id}/units",
                 "POST /travel-agency",
                 "POST /travel-agency/{agency_id}/staffs",
-                "GET /stays/units",
+                "GET /query/units",
             ],
             "utils": [
                 "POST /utils/test-email/",

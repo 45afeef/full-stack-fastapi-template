@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import login, private, users,profile, utils, stays, agency
+from app.api.routes import login, private, users,profile, query, utils, agency
 from app.api.routes import providers
 from app.core.config import settings
 
@@ -9,7 +9,7 @@ api_router.include_router(login.router)
 api_router.include_router(users.router)
 api_router.include_router(profile.router)
 api_router.include_router(agency.router)
-api_router.include_router(stays.router)
+api_router.include_router(query.router)
 api_router.include_router(utils.router)
 api_router.include_router(providers.router)
 
