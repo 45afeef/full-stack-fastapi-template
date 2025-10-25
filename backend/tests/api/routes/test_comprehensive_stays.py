@@ -224,14 +224,14 @@ class TestCreateStayUnit:
 
 
 class TestListStayUnits:
-    """Test GET /stays/units endpoint."""
+    """Test GET /query/units endpoint."""
 
     def test_list_units_superuser_success(
         self, client: TestClient, superuser_token_headers: dict[str, str]
     ) -> None:
         """Test successful stay units listing by superuser."""
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units",
+            f"{settings.API_V1_STR}/query/units",
             headers=superuser_token_headers,
         )
         assert r.status_code == 200
@@ -245,7 +245,7 @@ class TestListStayUnits:
     ) -> None:
         """Test stay units listing with filters."""
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units?min_price=100&max_price=200&limit=10&offset=0",
+            f"{settings.API_V1_STR}/query/units?min_price=100&max_price=200&limit=10&offset=0",
             headers=superuser_token_headers,
         )
         assert r.status_code == 200
@@ -257,7 +257,7 @@ class TestListStayUnits:
     ) -> None:
         """Test that stay units listing requires agency staff or superuser privileges."""
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units",
+            f"{settings.API_V1_STR}/query/units",
             headers=normal_user_token_headers,
         )
         assert r.status_code == 403
@@ -265,7 +265,7 @@ class TestListStayUnits:
 
     def test_list_units_no_auth(self, client: TestClient) -> None:
         """Test stay units listing without authentication."""
-        r = client.get(f"{settings.API_V1_STR}/stays/units")
+        r = client.get(f"{settings.API_V1_STR}/query/units")
         assert r.status_code == 401
 
     def test_list_units_invalid_pagination(
@@ -273,7 +273,7 @@ class TestListStayUnits:
     ) -> None:
         """Test stay units listing with invalid pagination parameters."""
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units?limit=-1&offset=-1",
+            f"{settings.API_V1_STR}/query/units?limit=-1&offset=-1",
             headers=superuser_token_headers,
         )
         assert r.status_code == 422  # Validation error
@@ -283,7 +283,7 @@ class TestListStayUnits:
     ) -> None:
         """Test stay units listing with invalid price filters."""
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units?min_price=abc&max_price=def",
+            f"{settings.API_V1_STR}/query/units?min_price=abc&max_price=def",
             headers=superuser_token_headers,
         )
         assert r.status_code == 422  # Validation error
@@ -293,7 +293,7 @@ class TestListStayUnits:
     ) -> None:
         """Test stay units listing with invalid provider ID."""
         r = client.get(
-            f"{settings.API_V1_STR}/stays/units?provider_id=invalid-uuid",
+            f"{settings.API_V1_STR}/query/units?provider_id=invalid-uuid",
             headers=superuser_token_headers,
         )
         assert r.status_code == 422  # Validation error

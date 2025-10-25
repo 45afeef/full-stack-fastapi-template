@@ -9,7 +9,7 @@ def test_list_units_requires_agency_or_superuser(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
     r = client.get(
-        f"{settings.API_V1_STR}/stays/units",
+        f"{settings.API_V1_STR}/query/units",
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
@@ -20,7 +20,7 @@ def test_list_units_as_superuser(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
     r = client.get(
-        f"{settings.API_V1_STR}/stays/units",
+        f"{settings.API_V1_STR}/query/units",
         headers=superuser_token_headers,
     )
     assert r.status_code == 200

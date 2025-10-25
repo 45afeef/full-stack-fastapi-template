@@ -10,7 +10,7 @@ from app.schemas.provider.stays import (
 )
 from app.api.routes.agency import is_agency_staff
 
-router = APIRouter(prefix="/stays", tags=["stays"])
+router = APIRouter(prefix="/query", tags=["query"])
 
 @router.get("/units", response_model=UnitsList)
 def list_stay_units(
