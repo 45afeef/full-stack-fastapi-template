@@ -9,6 +9,7 @@ from sqlmodel import select
 from app.models.travel.enums import AmenityScope, ServiceProviderType
 from app.core.config import settings
 from tests.utils.utils import random_email, random_lower_string
+from tests.utils.user import authentication_token_from_email
 
 
 def create_provider_and_cab(client: TestClient, superuser_headers: dict[str, str], owner_user, vehicle_type="SEDAN"):
@@ -132,7 +133,7 @@ def test_query_drivers_success_and_invalid(client: TestClient, superuser_token_h
     assert r.status_code == 422
 
 
-def test_query_stay_units_near_access_and_filters(client: TestClient, superuser_token_headers: dict[str, str], normal_user_token_headers: dict[str, str], db: Session):
+def test_query_stay_units_near_access_and_filters(client: TestClient, superuser_token_headers: dict[str, str], db: Session):
     # create an owner and a stay provider located near (10.0, 10.0)
     username = random_email()
     password = random_lower_string()
@@ -143,6 +144,9 @@ def test_query_stay_units_near_access_and_filters(client: TestClient, superuser_
     r = client.get(f"{settings.API_V1_STR}/query/stay-units-near?lat=10.0&lon=10.0")
     assert r.status_code == 401
 
+    # get token headers for this freshly-created normal user
+    normal_user_token_headers = authentication_token_from_email(client=client,  email=username, db=db)
+
     # normal authenticated user (not agency staff) -> 403
     r = client.get(f"{settings.API_V1_STR}/query/stay-units-near?lat=10.0&lon=10.0", headers=normal_user_token_headers)
     assert r.status_code == 403
@@ -151,19 +155,10 @@ def test_query_stay_units_near_access_and_filters(client: TestClient, superuser_
     agency_body = {"agency_name": "Test Agency", "contact_email": "a@b.com", "location_id": None, "created_by": str(owner.id)}
     r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json=agency_body)
     assert r.status_code == 200
-    agency = r.json()
-    agency_id = agency["id"]
+    agency_id = r.json()["id"]
 
-    # add staff (use the test fixture user created in conftest)
-    stmt = select(User).where(User.email == settings.EMAIL_TEST_USER)
-    found = db.exec(stmt).first()
-    if found:
-        normal_user_id = str(found.id)
-    else:
-        normal = crud.create_user(session=db, user_create=UserCreate(email=settings.EMAIL_TEST_USER, password=random_lower_string()))
-        normal_user_id = str(normal.id)
-
-    staff_body = {"user_id": normal_user_id, "role": None}
+    # add owner as staff
+    staff_body = {"user_id": str(owner.id), "role": None}
     r = client.post(f"{settings.API_V1_STR}/travel-agency/{agency_id}/staffs", headers=superuser_token_headers, json=staff_body)
     assert r.status_code == 200
 
