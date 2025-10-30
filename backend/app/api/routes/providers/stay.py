@@ -35,10 +35,8 @@ def add_amenity(*, provider_id: uuid.UUID, unit_id: uuid.UUID, session: SessionD
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
     amenity_obj = StayAmenity(**amenity, stay_service_provider_id=provider_id, stay_unit_id=unit_id)
-    session.add(amenity_obj)
-    session.commit()
-    session.refresh(amenity_obj)
-    return amenity_obj
+    created = crud.create_stay_amenity(session=session, amenity=amenity_obj)
+    return created
 
 
 @router.get("/units", response_model=UnitsList, dependencies=[Depends(get_current_user)])

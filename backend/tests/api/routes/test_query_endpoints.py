@@ -81,7 +81,14 @@ def create_stay_provider_with_unit(client: TestClient, superuser_headers: dict[s
     unit_id = unit["id"]
 
     if amenity:
-        r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/stay/units/{unit_id}/amenities", headers=superuser_headers, json={"amenity": amenity, "amenity_scope": AmenityScope.COMMON})
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{provider_id}/stay/units/{unit_id}/amenities",
+            headers=superuser_headers, 
+            json={
+                "amenity": amenity, 
+                "amenity_scope": AmenityScope.COMMON
+            }
+        )
         assert r.status_code == 200
 
     return provider, unit

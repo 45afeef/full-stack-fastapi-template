@@ -7,6 +7,7 @@ from app.core.security import get_password_hash, verify_password
 from app.models import User, UserCreate, UserUpdate
 from app.models.travel.cab import Cab, Driver
 from app.models.travel.providers import (
+    CabServiceProvider,
     ServiceProvider,
     StayServiceProvider,
     StayServiceProvider as StayProviderModel,
@@ -57,10 +58,6 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
     return db_user
 
 
-def create_item():
-    raise NotImplementedError("Item model removed — this function has been deprecated")
-
-
 def create_service_provider(*, session: Session, provider: dict | ServiceProvider) -> ServiceProvider:
     # Accept dicts (from DTOs) or ServiceProvider instances
     if isinstance(provider, dict):
@@ -81,11 +78,30 @@ def create_stay_provider_row(*, session: Session, provider_id) -> StayServicePro
     return obj
 
 
+def create_cab_provider_row(*, session: Session, provider_id: str) -> CabServiceProvider:
+    obj = CabServiceProvider(provider_id=provider_id)
+    session.add(obj)
+    session.commit()
+    session.refresh(obj)
+    return obj
+
+
 def create_stay_unit(*, session: Session, unit: dict | StayUnit) -> StayUnit:
     if isinstance(unit, dict):
         obj = StayUnit(**unit)
     else:
         obj = unit
+    session.add(obj)
+    session.commit()
+    session.refresh(obj)
+    return obj
+
+
+def create_stay_amenity(*, session: Session, amenity: dict | StayAmenity) -> StayAmenity:
+    if isinstance(amenity, dict):
+        obj = StayAmenity(**amenity)
+    else:
+        obj = amenity
     session.add(obj)
     session.commit()
     session.refresh(obj)
@@ -436,3 +452,4 @@ def list_stay_units_by_location(
     # slice for pagination
     paged = sorted_units[offset : offset + limit]
     return paged, len(sorted_units)
+

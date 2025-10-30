@@ -24,7 +24,12 @@ def _is_provider_owner(session: Session, user: User, provider: ServiceProvider) 
     status_code=201,
 )
 def create_provider(*, session: SessionDep, provider_in: ProviderCreate) -> Any:
-    """Superuser: create a service provider."""
+    """Superuser: create a service provider.
+    
+    Service provider can be any of the follwoing two
+    1. Cab Service Provider
+    2. Stay Service Provider
+    """
     # validate users
     create_by_user = session.get(User, provider_in.created_by)
     if not create_by_user:
