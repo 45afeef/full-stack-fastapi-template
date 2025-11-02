@@ -67,7 +67,6 @@ class TestAgencies:
         )
         assert r.status_code == 403
 
-
     def test_create_agency_no_auth(self, client: TestClient) -> None:
         agency_data = {
             "agency_name": "ACME Travel Agency",
@@ -77,7 +76,6 @@ class TestAgencies:
 
         r = client.post(f"{settings.API_V1_STR}/travel-agency", json=agency_data)
         assert r.status_code == 401
-
 
     def test_create_agency_missing_name(
         self, client: TestClient, superuser_token_headers: dict[str, str]

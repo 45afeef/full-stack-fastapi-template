@@ -24,18 +24,21 @@ def upgrade():
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('bookingcab', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.alter_column('bookingcab', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('bookingstay', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.alter_column('bookingstay', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('bookingtraveller', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.add_column('bookingtraveller', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
@@ -46,6 +49,7 @@ def upgrade():
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='updated_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('driver', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.add_column('driver', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
@@ -54,38 +58,45 @@ def upgrade():
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.alter_column('note', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.alter_column('note', 'updated_at',
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='updated_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('phonenumber', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.alter_column('phonenumber', 'created_at',
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.alter_column('profile', 'created_at',
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.alter_column('profile', 'updated_at',
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='updated_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('serviceprovider', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.alter_column('serviceprovider', 'created_at',
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('stayamenity', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.add_column('stayamenity', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
@@ -94,6 +105,7 @@ def upgrade():
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='updated_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.add_column('stayunit', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.add_column('stayunit', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
@@ -102,16 +114,19 @@ def upgrade():
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.alter_column('travelagencystaff', 'created_at',
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='created_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     op.alter_column('travelagencystaff', 'updated_at',
                existing_type=sa.VARCHAR(),
                type_=sa.DateTime(timezone=True),
                postgresql_using='updated_at::timestamp with time zone',
+               server_default=sa.text("now()"),
                nullable=False)
     # ### end Alembic commands ###
 
