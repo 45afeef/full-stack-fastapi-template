@@ -2,6 +2,8 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from sqlmodel import SQLModel, Field
+from sqlmodel import Column, DateTime, func
+
 from .enums import BookingStatus, RoomType
 
 
@@ -14,14 +16,30 @@ class Booking(SQLModel, table=True):
     booking_date: Optional[datetime] = Field(default=None)
     status: Optional[BookingStatus] = Field(default=None)
     total_amount: Optional[int] = Field(default=None)
-    created_at: Optional[datetime] = Field(default=None)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
 
 
 class BookingTraveller(SQLModel, table=True):
     id: UUID = Field(default=None, primary_key=True)
     booking_id: UUID = Field(foreign_key="booking.id")
     traveller_id: UUID = Field(foreign_key="profile.id")
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
 
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
 
 class BookingCab(SQLModel, table=True):
     id: UUID = Field(default=None, primary_key=True)
@@ -36,8 +54,15 @@ class BookingCab(SQLModel, table=True):
     rate: Optional[int] = Field(default=None)
     status: Optional[BookingStatus] = Field(default=None)
     notes: Optional[str] = Field(default=None)
-    created_at: Optional[datetime] = Field(default=None)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
 
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
 
 class BookingStay(SQLModel, table=True):
     id: UUID = Field(default=None, primary_key=True)
@@ -49,7 +74,15 @@ class BookingStay(SQLModel, table=True):
     room_type: Optional[RoomType] = Field(default=None)
     rate: Optional[int] = Field(default=None)
     status: Optional[BookingStatus] = Field(default=None)
-    created_at: Optional[datetime] = Field(default=None)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
 
 
 __all__ = [

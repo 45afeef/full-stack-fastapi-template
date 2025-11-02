@@ -1,5 +1,4 @@
 from .enums import *
-from .base import *
 from .location import *
 from .providers import *
 from .cab import *
@@ -10,7 +9,6 @@ from .enquiry import *
 
 __all__ = [
     *enums.__all__,
-    *base.__all__,
     *location.__all__,
     *providers.__all__,
     *cab.__all__,

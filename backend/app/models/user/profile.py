@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Optional
 import uuid
-from datetime import date
+from datetime import date, datetime
+from sqlmodel import Column, DateTime, func
 
 from pydantic import EmailStr
 
@@ -39,9 +40,17 @@ class ProfileUpdate(ProfileBase):
 
 class Profile(ProfileBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE")
-    created_at: Optional[str] = Field(default=None)
-    updated_at: Optional[str] = Field(default=None)
+    user_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE")    
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
+
 
     user: Optional["User"] = Relationship(back_populates="profile", sa_relationship_kwargs={"uselist": False})
 

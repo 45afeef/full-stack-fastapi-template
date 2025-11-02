@@ -2,15 +2,22 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from sqlmodel import SQLModel, Field
-
+from sqlmodel import Column, DateTime, func
 
 class Note(SQLModel, table=True):
     id: UUID = Field(default=None, primary_key=True)
     title: Optional[str] = Field(default=None)
     message: Optional[str] = Field(default=None)
     created_by: UUID = Field(foreign_key="user.id")
-    created_at: Optional[datetime] = Field(default=None)
-    updated_at: Optional[datetime] = Field(default=None)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
 
 
 class PhoneNote(SQLModel, table=True):

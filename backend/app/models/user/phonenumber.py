@@ -1,7 +1,9 @@
+from datetime import datetime 
 from typing import Optional
 import uuid
 
 from sqlmodel import Field, SQLModel
+from sqlmodel import Column, DateTime, func
 
 
 # Shared properties
@@ -29,7 +31,16 @@ class PhoneNumberUpdate(SQLModel):
 
 class PhoneNumber(PhoneNumberBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: Optional[str] = Field(default=None)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
+
 
 
 class PhoneNumberPublic(PhoneNumberBase):
