@@ -15,6 +15,7 @@ from app.models.user.profile import Profile, ProfileCreate, ProfilePublic, Profi
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 
+# TODO : Found an Internal Server Error when there is no profile in the database
 @router.get(
     "/",
     dependencies=[Depends(get_current_user)],

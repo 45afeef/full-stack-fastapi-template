@@ -83,14 +83,19 @@ def delete_agency(*, agency_id: uuid.UUID, session: SessionDep) -> Any:
     return {"ok": True}
 
 
+# TODO: bug - fix agency staff endpoints to check agency existence first before authorization to avoid info leak
+# TODO: bug - found the same person can be assigned multiple times as staff to the same agency
+# TODO: owner is not able to add staff (403 error)
 @router.post("/{agency_id}/staffs", response_model=AgencyStaffPublic)
 def create_agency_staff(*, agency_id: uuid.UUID, session: SessionDep, staff: AgencyStaffCreate, current_user: CurrentUser) -> Any:
     """Agency owner or superuser can assign staff. Owner allowed; superuser allowed."""
     db_agency = crud.get_travel_agency(session=session, agency_id=str(agency_id))
-    if not db_agency:
-        raise HTTPException(status_code=404, detail="Agency not found")
+    # TODO: check authorization first before checking agency existence, to avoid info leak
     if not (current_user.is_superuser or _is_agency_owner(session, current_user, db_agency)):
         raise HTTPException(status_code=403, detail="Not authorized to assign staff")
+    if not db_agency:
+        raise HTTPException(status_code=404, detail="Agency not found")
+    # TODO: check that user to be assigned exists
     # create staff record
     staff_obj = TravelAgencyStaff(**staff.model_dump(), travel_agency_id=agency_id)
     created = crud.assign_agency_staff(session=session, staff=staff_obj)
@@ -131,6 +136,8 @@ def update_agency_staff(*, agency_id: uuid.UUID, staff_id: uuid.UUID, session: S
     return updated
 
 
+# TODO: prevent owner from removing themselves as staff
+# TODO: owner accidentally added himself multiple times as staff tried to remove one record but says no authorization
 @router.delete("/{agency_id}/staffs/{staff_id}")
 def delete_agency_staff(*, agency_id: uuid.UUID, staff_id: uuid.UUID, session: SessionDep, current_user: CurrentUser) -> Any:
     """Only agency owner or superuser can remove staff."""
