@@ -11,13 +11,13 @@ class StayUnit(SQLModel, table=True):
     description: Optional[str] = Field(default=None)
     provider_id: UUID = Field(foreign_key="stayserviceprovider.provider_id")
     room_rate: Optional[int] = Field(default=None)
+    room_rate_occupancy: Optional[int] = Field(default=None)
     per_head_rate: Optional[int] = Field(default=None)
     max_occupancy: Optional[int] = Field(default=None)
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
-
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
