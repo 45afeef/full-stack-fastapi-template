@@ -3,7 +3,7 @@ name: Deploy FastAPI Backend to Cloud Run
 on:
   push:
     branches:
-      - WIP-ci-cd
+      - develop
     paths:
       - "backend/**"
       - ".github/workflows/deploy-backend-to-cloud-run-development.yml"

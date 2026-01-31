@@ -108,7 +108,18 @@ class TestProviderCRUDAndPermissions:
         provider_id = provider["id"]
 
         # create a cab (superuser)
-        cab_data = {"vehicle_type": "SEDAN", "vehicle_number": "ABC123"}
+        cab_data = {
+            "vehicle_type": "SEDAN", 
+            "vehicle_number": "ABC123", 
+            "minimum_rate": 100.0, 
+            "km_for_minimum_rate": 5.0, 
+            "per_km_rate": 15.0, 
+            "capacity": 4,
+            "name": "ABC Cab",
+            "company_model": "Model XYZ",
+            "color": "Blue"
+        }
+        
         r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/cab", headers=superuser_token_headers, json=cab_data)
         # Might be 200 or 400 depending on whether CabServiceProvider row exists; accept 200/400
         assert r.status_code in (200, 400)

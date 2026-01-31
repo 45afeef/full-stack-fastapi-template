@@ -24,7 +24,18 @@ def create_provider_and_cab(client: TestClient, superuser_headers: dict[str, str
     provider = r.json()
     provider_id = provider["id"]
 
-    cab_data = {"vehicle_type": vehicle_type, "vehicle_number": "QRY123"}
+    cab_data = {
+        "vehicle_type": vehicle_type,
+        "vehicle_number": "QRY123", 
+        "minimum_rate": 100.0, 
+        "km_for_minimum_rate": 5.0, 
+        "per_km_rate": 15.0, 
+        "capacity": 4,
+        "name": "ABC Cab",
+        "company_model": "Model XYZ",
+        "color": "Blue"
+    }
+
     r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/cab", headers=superuser_headers, json=cab_data)
     # accept 200 or 400 per existing tests
     assert r.status_code in (200, 400)

@@ -6,6 +6,13 @@ from sqlmodel import SQLModel
 class CabCreate(SQLModel):
     vehicle_type: str
     vehicle_number: str
+    minimum_rate: float
+    km_for_minimum_rate: float
+    per_km_rate: float
+    capacity: int
+    name: str
+    company_model: str
+    color: str
 
 
 class CabPublic(SQLModel):
@@ -13,6 +20,13 @@ class CabPublic(SQLModel):
     provider_id: UUID
     vehicle_type: str
     vehicle_number: str
+    minimum_rate: float
+    km_for_minimum_rate: float
+    per_km_rate: float
+    capacity: int
+    name: str
+    company_model: str
+    color: str
 
 
 class DriverCreate(SQLModel):
