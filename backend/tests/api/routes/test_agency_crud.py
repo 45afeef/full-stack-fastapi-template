@@ -11,9 +11,14 @@ from app.core.config import settings
 from app.models import User, UserCreate
 from tests.utils.utils import random_email, random_lower_string
 
-
 class TestAgencyCRUD:
-    def test_full_agency_crud_as_superuser(self, client: TestClient, superuser_token_headers: dict[str, str], normal_user_token_headers:dict[str, str],db: Session) -> None:
+    def test_full_agency_crud_as_superuser(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        normal_user_token_headers: dict[str, str],
+        db: Session,
+    ) -> None:
         # create user
         username = random_email()
         password = random_lower_string()
@@ -21,34 +26,80 @@ class TestAgencyCRUD:
         user = crud.create_user(session=db, user_create=user_in)
 
         # create agency as superuser
-        agency_data = {"agency_name": "New Agency", "contact_email": "a@test.com", "created_by": str(user.id)}
-        r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json=agency_data)
+        agency_data = {
+            "agency_name": "New Agency",
+            "contact_email": "a@test.com",
+            "created_by": str(user.id),
+        }
+        r = client.post(
+            f"{settings.API_V1_STR}/travel-agency",
+            headers=superuser_token_headers,
+            json=agency_data,
+        )
         assert r.status_code == 200
         agency = r.json()
         aid = agency["id"]
 
-        # get detail
-        r = client.get(f"{settings.API_V1_STR}/travel-agency/{aid}", headers=superuser_token_headers)
+        # get detail as superuser
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{aid}",
+            headers=superuser_token_headers,
+        )
         assert r.status_code == 200
 
-        # update agency
-        r = client.put(f"{settings.API_V1_STR}/travel-agency/{aid}", headers=superuser_token_headers, json={"agency_name": "Updated"})
+        # update agency as superuser
+        r = client.put(
+            f"{settings.API_V1_STR}/travel-agency/{aid}",
+            headers=superuser_token_headers,
+            json={"agency_name": "Updated"},
+        )
         assert r.status_code == 200
+        assert r.json()["agency_name"] == "Updated"
 
-        # verify no other users can access crud ops
-        r = client.get(f"{settings.API_V1_STR}/travel-agency/{aid}", headers=normal_user_token_headers)
+        # verify normal user cannot access detail/update/delete
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{aid}",
+            headers=normal_user_token_headers,
+        )
         assert r.status_code == 403
-        r = client.put(f"{settings.API_V1_STR}/travel-agency/{aid}", headers=normal_user_token_headers, json={"agency_name": "Hacked"})
+        assert r.json()["detail"] == "Not authorized to view agency"
+
+        r = client.put(
+            f"{settings.API_V1_STR}/travel-agency/{aid}",
+            headers=normal_user_token_headers,
+            json={"agency_name": "Hacked"},
+        )
         assert r.status_code == 403
-        r = client.delete(f"{settings.API_V1_STR}/travel-agency/{aid}", headers=normal_user_token_headers)
+        assert r.json()["detail"] == "Not authorized to update agency"
+
+        r = client.delete(
+            f"{settings.API_V1_STR}/travel-agency/{aid}",
+            headers=normal_user_token_headers,
+        )
         assert r.status_code == 403
-        r = client.get(f"{settings.API_V1_STR}/travel-agency", headers=normal_user_token_headers)
+        assert r.json()["detail"] == "The user doesn't have enough privileges"
+
+        # normal user CAN list agencies (but sees none)
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency",
+            headers=normal_user_token_headers,
+        )
+        assert r.status_code == 200
+        assert r.json() == []
+
+        # normal user cannot create agencies
+        r = client.post(
+            f"{settings.API_V1_STR}/travel-agency",
+            headers=normal_user_token_headers,
+            json=agency_data,
+        )
         assert r.status_code == 403
-        r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=normal_user_token_headers, json=agency_data)
-        assert r.status_code == 403
-        
+
         # delete agency as superuser
-        r = client.delete(f"{settings.API_V1_STR}/travel-agency/{aid}", headers=superuser_token_headers)
+        r = client.delete(
+            f"{settings.API_V1_STR}/travel-agency/{aid}",
+            headers=superuser_token_headers,
+        )
         assert r.status_code == 200
 
     def test_owner_can_manage_staff_but_not_delete_agency(self, client: TestClient, superuser_token_headers: dict[str, str], normal_user_token_headers: dict[str, str], db: Session) -> None:

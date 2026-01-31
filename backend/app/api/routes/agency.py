@@ -36,10 +36,34 @@ def create_agency(*, session: SessionDep, agency: AgencyCreate) -> Any:
     return agency_obj
 
 
-@router.get("", response_model=list[AgencyPublic], dependencies=[Depends(get_current_active_superuser)])
-def list_agencies(*, session: SessionDep) -> Any:
-    """Superuser: list agencies."""
-    return crud.list_travel_agencies(session=session)
+@router.get(
+    "",
+    response_model=list[AgencyPublic],
+)
+def get_agencies(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Any:
+    """
+    Superuser: get all travel agencies
+    Staff: get agencies where the user is a staff member
+    """
+
+    # SUPERUSER → all agencies
+    if current_user.is_superuser:
+        statement = select(TravelAgency)
+        return session.exec(statement).all()
+
+    # STAFF → only their agencies
+    statement = (
+        select(TravelAgency)
+        .join(TravelAgencyStaff)
+        .where(TravelAgencyStaff.user_id == current_user.id)
+    )
+    agencies = session.exec(statement).all()
+    return agencies
+
 
 
 @router.get("/{agency_id}", response_model=AgencyDetail)
