@@ -9,9 +9,8 @@ from app.models.travel.enums import StaffRole
 
 class AgencyCreate(SQLModel):
     agency_name: str
-    contact_email: Optional[EmailStr] = None
+    contact_email: Optional[EmailStr]
     location_id: Optional[UUID] = None
-    created_by: UUID
 
 class AgencyPublic(SQLModel):
     id: UUID

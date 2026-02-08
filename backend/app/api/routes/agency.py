@@ -26,13 +26,12 @@ def _is_agency_owner(session: Session, user: User, agency: TravelAgency) -> bool
 
 
 @router.post("", response_model=AgencyPublic, dependencies=[Depends(get_current_active_superuser)])
-def create_agency(*, session: SessionDep, agency: AgencyCreate) -> Any:
+def create_agency(*, session: SessionDep, agency: AgencyCreate, current_user: CurrentUser) -> Any:
     """Superuser: create a travel agency."""
-    user = session.get(User, agency.created_by)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found for created_by")
+    agency = agency.model_dump()
+    agency['created_by'] = current_user.id
 
-    agency_obj = crud.create_travel_agency(session=session, agency=agency.model_dump())
+    agency_obj = crud.create_travel_agency(session=session, agency=agency)
     return agency_obj
 
 
