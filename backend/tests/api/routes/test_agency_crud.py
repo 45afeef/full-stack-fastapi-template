@@ -114,12 +114,16 @@ class TestAgencyCRUD:
         password2 = random_lower_string()
         user2 = crud.create_user(session=db, user_create=UserCreate(email=username2, password=password2))
 
-        # superuser creates agency with owner as created_by
-        agency_data = {"agency_name": "Owner Agency", "created_by": str(owner.id)}
+        # superuser creates agency
+        agency_data = {"agency_name": "Owner Agency", "contact_email":"agency@company.com"}
         r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json=agency_data)
         assert r.status_code == 200
         agency = r.json()
         aid = agency["id"]
+
+        # superuser assigns owner
+        r = client.post(f"{settings.API_V1_STR}/travel-agency/{aid}/staffs", headers=superuser_token_headers, json={"user_id": str(owner.id), "role": "OWNER"})
+        assert r.status_code == 200
 
         # owner logs in
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": username, "password": password})
@@ -149,10 +153,18 @@ class TestAgencyCRUD:
         other = crud.create_user(session=db, user_create=UserCreate(email=random_email(), password=random_lower_string()))
 
         # superuser creates agency
-        r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json={"agency_name": "A", "created_by": str(owner.id)})
+        r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json={"agency_name": "A", "contact_email":"agency@company.com"})
         agency = r.json()
         aid = agency['id']
 
         # normal user tries to assign staff
         r = client.post(f"{settings.API_V1_STR}/travel-agency/{aid}/staffs", headers=normal_user_token_headers, json={"user_id": str(other.id), "role": "AGENT"})
         assert r.status_code == 403
+    
+    # Test that agency creation fails without contact_email or name
+    def test_agency_creation_requires_fields(self, client: TestClient, superuser_token_headers: dict[str, str]) -> None:
+        r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json={"agency_name": "No Contact"})
+        assert r.status_code == 422
+
+        r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json={"contact_email": "no-agency-name@example.com"})
+        assert r.status_code == 422

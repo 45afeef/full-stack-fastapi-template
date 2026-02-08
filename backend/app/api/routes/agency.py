@@ -22,7 +22,10 @@ router = APIRouter(prefix="/travel-agency", tags=["agencies"])
 
 
 def _is_agency_owner(session: Session, user: User, agency: TravelAgency) -> bool:
-    return agency.created_by == user.id
+    # helper to check if the user is the owner of the agency
+    statement = select(TravelAgencyStaff).where(TravelAgencyStaff.travel_agency_id == agency.id).where(TravelAgencyStaff.user_id == user.id).where(TravelAgencyStaff.role == "OWNER")
+    found = session.exec(statement).first()
+    return found is not None
 
 
 @router.post("", response_model=AgencyPublic, dependencies=[Depends(get_current_active_superuser)])

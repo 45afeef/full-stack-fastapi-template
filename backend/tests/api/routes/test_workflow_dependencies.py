@@ -89,28 +89,6 @@ class TestUserToAgencyToStaffWorkflow:
         units_response = r.json()
         assert "data" in units_response and "count" in units_response
 
-    def test_workflow_fails_without_user_creation(
-        self, client: TestClient, superuser_token_headers: dict[str, str]
-    ) -> None:
-        """
-        Test that agency creation fails if the user doesn't exist.
-        This demonstrates the dependency requirement.
-        """
-        # Try to create agency with non-existent user
-        agency_data = {
-            "agency_name": "ACME Travel Agency",
-            "contact_email": "contact@acme.com",
-            "created_by": str(uuid.uuid4()),  # Non-existent user
-        }
-
-        r = client.post(
-            f"{settings.API_V1_STR}/travel-agency",
-            headers=superuser_token_headers,
-            json=agency_data,
-        )
-        assert r.status_code == 404
-        assert r.json()["detail"] == "User not found for created_by"
-
     def test_workflow_fails_without_agency_creation(
         self, client: TestClient, superuser_token_headers: dict[str, str], db: Session
     ) -> None:
@@ -454,26 +432,6 @@ class TestWorkflowErrorHandling:
     Test error handling in workflow scenarios.
     """
 
-    def test_workflow_with_invalid_data_types(
-        self, client: TestClient, superuser_token_headers: dict[str, str]
-    ) -> None:
-        """
-        Test workflow with invalid data types to ensure proper error handling.
-        """
-        # Test with invalid UUID format
-        agency_data = {
-            "agency_name": "Test Agency",
-            "contact_email": "test@agency.com",
-            "created_by": "invalid-uuid-format",
-        }
-
-        r = client.post(
-            f"{settings.API_V1_STR}/travel-agency",
-            headers=superuser_token_headers,
-            json=agency_data,
-        )
-        assert r.status_code == 422  # Validation error
-
     def test_workflow_with_missing_required_fields(
         self, client: TestClient, superuser_token_headers: dict[str, str]
     ) -> None:
@@ -483,7 +441,7 @@ class TestWorkflowErrorHandling:
         # Test agency creation without required fields
         agency_data = {
             "contact_email": "test@agency.com",
-            # Missing agency_name and created_by
+            # Missing agency_name
         }
 
         r = client.post(

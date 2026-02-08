@@ -171,6 +171,9 @@ class TestBookingFull:
         owner = crud.get_user_by_email(session=db, email=owner_email)
         agency = crud.create_travel_agency(session=db, agency={"agency_name": "OwnerTest", "created_by": str(owner.id)})
 
+        # assign owner as staff
+        crud.assign_agency_staff(session=db, staff={"user_id": str(owner.id), "travel_agency_id": str(agency.id), "role": "OWNER"})
+
         # staff
         staff_email = random_email()
         staff_headers = authentication_token_from_email(client=client, email=staff_email, db=db)

@@ -38,21 +38,6 @@ class TestAgencies:
         assert created_agency["contact_email"] == "contact@acme.com"
         assert "id" in created_agency
 
-    def test_create_agency_user_not_found(self, client: TestClient, superuser_token_headers: dict[str, str]) -> None:
-        agency_data = {
-            "agency_name": "ACME Travel Agency",
-            "contact_email": "contact@acme.com",
-            "created_by": str(uuid.uuid4()),
-        }
-
-        r = client.post(
-            f"{settings.API_V1_STR}/travel-agency",
-            headers=superuser_token_headers,
-            json=agency_data,
-        )
-        assert r.status_code == 404
-        assert r.json()["detail"] == "User not found for created_by"
-
     def test_create_agency_requires_superuser(self, client: TestClient, normal_user_token_headers: dict[str, str]) -> None:
         agency_data = {
             "agency_name": "ACME Travel Agency",
