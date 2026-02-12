@@ -14,7 +14,7 @@ from app.models.travel.enums import ServiceProviderType
 from app.models import User, UserCreate
 from app.models.travel.providers import ServiceProvider
 from app.models.travel.stay import StayUnit
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_phone, random_lower_string
 
 
 class TestCreateStayProvider:
@@ -25,9 +25,9 @@ class TestCreateStayProvider:
     ) -> None:
         """Test successful stay provider creation."""
         # Create a user to be the owner and creator
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         provider_data = {
@@ -121,9 +121,9 @@ class TestCreateStayUnit:
     ) -> None:
         """Test successful stay unit creation."""
         # Create a user and provider first
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         provider_data = {

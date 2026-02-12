@@ -65,16 +65,19 @@ def generate_test_email(email_to: str) -> EmailData:
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_reset_password_email(email_to: str, email: str, token: str) -> EmailData:
+def generate_reset_password_email(
+    email_to: str | None = None, email: str | None = None, token: str = "", phone_number: str | None = None
+) -> EmailData:
     project_name = settings.PROJECT_NAME
-    subject = f"{project_name} - Password recovery for user {email}"
+    identifier = phone_number or email or (email_to or "")
+    subject = f"{project_name} - Password recovery for user {identifier}"
     link = f"{settings.FRONTEND_HOST}/reset-password?token={token}"
     html_content = render_email_template(
         template_name="reset_password.html",
         context={
             "project_name": settings.PROJECT_NAME,
-            "username": email,
-            "email": email_to,
+            "username": identifier,
+            "email": email_to or "",
             "valid_hours": settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS,
             "link": link,
         },
@@ -100,13 +103,18 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
+def generate_password_reset_token(email: str | None = None, phone_number: str | None = None) -> str:
+    """Generate a JWT token whose subject is either the email or phone number.
+
+    Prefer `phone_number` when provided; fall back to `email`.
+    """
+    identifier = phone_number or email or ""
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
     now = datetime.now(timezone.utc)
     expires = now + delta
     exp = expires.timestamp()
     encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email},
+        {"exp": exp, "nbf": now, "sub": identifier},
         settings.SECRET_KEY,
         algorithm=security.ALGORITHM,
     )

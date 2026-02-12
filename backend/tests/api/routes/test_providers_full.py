@@ -6,14 +6,14 @@ from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
 from app.models.travel.enums import ServiceProviderType
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_phone, random_lower_string,  random_email
 
 class TestProviderCRUDAndPermissions:
     def test_provider_create_fails_with_invalid_data(self, client: TestClient, superuser_token_headers: dict[str, str], normal_user_token_headers: dict[str, str] , db: Session):
         # Create a user who will be owner
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         owner = crud.create_user(session=db, user_create=user_in)
 
         # try with fake created_by id
@@ -47,9 +47,9 @@ class TestProviderCRUDAndPermissions:
 
     def test_provider_crud_and_permissions(self, client: TestClient, superuser_token_headers: dict[str, str], normal_user_token_headers: dict[str, str] , db: Session):
         # Create a user who will be owner
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         owner = crud.create_user(session=db, user_create=user_in)
 
         # Superuser creates a provider
@@ -73,7 +73,7 @@ class TestProviderCRUDAndPermissions:
         assert r.status_code == 403
 
         # Owner can get provider
-        login_data = {"username": username, "password": password}
+        login_data = {"username": phone_number, "password": password}
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
         tokens = r.json()
         owner_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
@@ -92,9 +92,9 @@ class TestProviderCRUDAndPermissions:
 
     def test_cab_and_driver_endpoints(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create owner and provider
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user = crud.create_user(session=db, user_create=UserCreate(email=username, password=password))
+        user = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
         provider_data = {
             "provider_type": ServiceProviderType.CAB,
@@ -134,7 +134,7 @@ class TestProviderCRUDAndPermissions:
         
         # create driver (superuser)
         # a driver should have a profile so create a profile first
-        profile_data = {"full_name": "Driver One", "primary_email": random_email(), "primary_phone_number": "1234567890","user_id": str(user.id)}
+        profile_data = {"full_name": "Driver One", "primary_email": random_email(), "primary_phone_number": random_phone(),"user_id": str(user.id)}
         r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json=profile_data)
         assert r.status_code == 200
 
@@ -144,7 +144,7 @@ class TestProviderCRUDAndPermissions:
         assert r.status_code == 200
 
         # list drivers as owner
-        r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": username, "password": password})
+        r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": phone_number, "password": password})
         tokens = r.json()
         owner_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
         r = client.get(f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers", headers=owner_headers)
@@ -153,9 +153,9 @@ class TestProviderCRUDAndPermissions:
 
     def test_stay_unit_endpoints(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create owner and provider
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user = crud.create_user(session=db, user_create=UserCreate(email=username, password=password))
+        user = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
         provider_data = {
             "provider_type": ServiceProviderType.STAY,
@@ -174,7 +174,7 @@ class TestProviderCRUDAndPermissions:
         assert r.status_code == 200
 
         # normal user cannot list units unless agency staff
-        r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": username, "password": password})
+        r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": phone_number, "password": password})
         tokens = r.json()
         user_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
         r = client.get(f"{settings.API_V1_STR}/query/units", headers=user_headers)

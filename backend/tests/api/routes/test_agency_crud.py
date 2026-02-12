@@ -9,7 +9,7 @@ from sqlmodel import Session
 from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_phone, random_lower_string
 
 class TestAgencyCRUD:
     def test_full_agency_crud_as_superuser(
@@ -20,9 +20,9 @@ class TestAgencyCRUD:
         db: Session,
     ) -> None:
         # create user
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         # create agency as superuser
@@ -104,15 +104,15 @@ class TestAgencyCRUD:
 
     def test_owner_can_manage_staff_but_not_delete_agency(self, client: TestClient, superuser_token_headers: dict[str, str], normal_user_token_headers: dict[str, str], db: Session) -> None:
         # create owner user
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         owner = crud.create_user(session=db, user_create=user_in)
 
         # create another user
-        username2 = random_email()
+        phone_number2 = random_phone()
         password2 = random_lower_string()
-        user2 = crud.create_user(session=db, user_create=UserCreate(email=username2, password=password2))
+        user2 = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number2, password=password2))
 
         # superuser creates agency
         agency_data = {"agency_name": "Owner Agency", "contact_email":"agency@company.com"}
@@ -126,7 +126,7 @@ class TestAgencyCRUD:
         assert r.status_code == 200
 
         # owner logs in
-        r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": username, "password": password})
+        r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": phone_number, "password": password})
         assert r.status_code == 200
         tokens = r.json()
         owner_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
@@ -147,10 +147,10 @@ class TestAgencyCRUD:
 
     def test_non_owner_cannot_manage_staff(self, client: TestClient, superuser_token_headers: dict[str, str], normal_user_token_headers: dict[str, str], db: Session) -> None:
         # create owner and other user
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(email=username, password=password))
-        other = crud.create_user(session=db, user_create=UserCreate(email=random_email(), password=random_lower_string()))
+        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
+        other = crud.create_user(session=db, user_create=UserCreate(phone_number=random_phone(), password=random_lower_string()))
 
         # superuser creates agency
         r = client.post(f"{settings.API_V1_STR}/travel-agency", headers=superuser_token_headers, json={"agency_name": "A", "contact_email":"agency@company.com"})

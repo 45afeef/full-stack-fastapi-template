@@ -13,7 +13,7 @@ from app.crud import create_user
 from app.models import UserCreate
 from app.utils import generate_password_reset_token
 from tests.utils.user import user_authentication_headers
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_phone, random_lower_string
 
 
 class TestLoginAccessToken:
@@ -40,7 +40,9 @@ class TestLoginAccessToken:
         }
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
         assert r.status_code == 400
-        assert r.json()["detail"] == "Incorrect email or password"
+        assert r.json()["detail"] == "Incorrect phone number or password"
+
+
 
     def test_get_access_token_incorrect_email(self, client: TestClient) -> None:
         """Test login with non-existent email."""
@@ -50,14 +52,14 @@ class TestLoginAccessToken:
         }
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
         assert r.status_code == 400
-        assert r.json()["detail"] == "Incorrect email or password"
+        assert r.json()["detail"] == "Incorrect phone number or password"
 
     def test_get_access_token_inactive_user(self, client: TestClient, db: Session) -> None:
         """Test login with inactive user."""
-        email = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
         user_create = UserCreate(
-            email=email,
+            phone_number=phone_number,
             full_name="Test User",
             password=password,
             is_active=False,  # Inactive user
@@ -66,7 +68,7 @@ class TestLoginAccessToken:
         create_user(session=db, user_create=user_create)
         
         login_data = {
-            "username": email,
+            "username": phone_number,
             "password": password,
         }
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
@@ -109,11 +111,11 @@ class TestLoginTestToken:
         )
         result = r.json()
         assert r.status_code == 200
-        assert "email" in result
+        assert "phone_number" in result
         assert "id" in result
         assert "is_active" in result
         assert "is_superuser" in result
-        assert result["email"] == settings.FIRST_SUPERUSER
+        assert result["phone_number"] == settings.FIRST_SUPERUSER
         assert result["is_superuser"] is True
 
     def test_use_access_token_normal_user(
@@ -126,7 +128,7 @@ class TestLoginTestToken:
         )
         result = r.json()
         assert r.status_code == 200
-        assert result["email"] == settings.EMAIL_TEST_USER
+        assert result["phone_number"] == settings.PHONE_TEST_USER
         assert result["is_superuser"] is False
 
     def test_use_access_token_invalid_token(self, client: TestClient) -> None:
@@ -157,46 +159,36 @@ class TestLoginTestToken:
 class TestPasswordRecovery:
     """Test POST /password-recovery/{email} endpoint."""
 
+    # TODO : Update this test when we roll out actual phone number-based password recovery
     def test_recovery_password_success(
-        self, client: TestClient, normal_user_token_headers: dict[str, str]
+        self, client: TestClient, superuser_token_headers: dict[str, str]
     ) -> None:
         """Test successful password recovery email."""
         with (
             patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
             patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
         ):
-            email = "test@example.com"
+            email = "+1234567890"
             r = client.post(
                 f"{settings.API_V1_STR}/password-recovery/{email}",
-                headers=normal_user_token_headers,
+                headers=superuser_token_headers,
             )
             assert r.status_code == 200
-            assert r.json() == {"message": "Password recovery email sent"}
+            assert r.json() == {"message": "Password recovery token created (no email sent)"}
 
     def test_recovery_password_user_not_exists(
-        self, client: TestClient, normal_user_token_headers: dict[str, str]
+        self, client: TestClient, superuser_token_headers: dict[str, str]
     ) -> None:
         """Test password recovery for non-existent user."""
-        email = "nonexistent@example.com"
+        phone = "+9876543210"
         r = client.post(
-            f"{settings.API_V1_STR}/password-recovery/{email}",
-            headers=normal_user_token_headers,
+            f"{settings.API_V1_STR}/password-recovery/{phone}",
+            headers=superuser_token_headers,
         )
         assert r.status_code == 404
-        assert r.json()["detail"] == "The user with this email does not exist in the system."
+        assert r.json()["detail"] == "The user with this phone number does not exist in the system."
 
-    def test_recovery_password_invalid_email_format(
-        self, client: TestClient, normal_user_token_headers: dict[str, str]
-    ) -> None:
-        """Test password recovery with invalid email format."""
-        email = "invalid-email-format"
-        r = client.post(
-            f"{settings.API_V1_STR}/password-recovery/{email}",
-            headers=normal_user_token_headers,
-        )
-        # This might return 404 or 422 depending on validation
-        assert r.status_code in [404, 422]
-
+    
     def test_recovery_password_empty_email(
         self, client: TestClient, normal_user_token_headers: dict[str, str]
     ) -> None:
@@ -208,26 +200,38 @@ class TestPasswordRecovery:
         )
         assert r.status_code == 404
 
+    # Check that non-superusers cannot access this endpoint
+    def test_recovery_password_requires_superuser(
+        self, client: TestClient, normal_user_token_headers: dict[str, str]
+    ) -> None:
+        email = "+1234567890"
+        r = client.post(
+            f"{settings.API_V1_STR}/password-recovery/{email}",
+            headers=normal_user_token_headers,
+        )
+        assert r.status_code == 403
+        assert r.json()["detail"] == "The user doesn't have enough privileges"
+
 
 class TestResetPassword:
     """Test POST /reset-password/ endpoint."""
 
     def test_reset_password_success(self, client: TestClient, db: Session) -> None:
         """Test successful password reset."""
-        email = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
         new_password = random_lower_string()
 
         user_create = UserCreate(
-            email=email,
+            phone_number=phone_number,
             full_name="Test User",
             password=password,
             is_active=True,
             is_superuser=False,
         )
         user = create_user(session=db, user_create=user_create)
-        token = generate_password_reset_token(email=email)
-        headers = user_authentication_headers(client=client, email=email, password=password)
+        token = generate_password_reset_token(phone_number=phone_number)
+        headers = user_authentication_headers(client=client, phone_number=phone_number, password=password)
         data = {"new_password": new_password, "token": token}
 
         r = client.post(
@@ -258,8 +262,8 @@ class TestResetPassword:
 
     def test_reset_password_user_not_found(self, client: TestClient, db: Session) -> None:
         """Test password reset for non-existent user."""
-        email = "nonexistent@example.com"
-        token = generate_password_reset_token(email=email)
+        phone_number = "nonexistent_phone_number"
+        token = generate_password_reset_token(phone_number=phone_number)
         data = {"new_password": "newpassword123", "token": token}
         
         r = client.post(
@@ -267,23 +271,23 @@ class TestResetPassword:
             json=data,
         )
         assert r.status_code == 404
-        assert r.json()["detail"] == "The user with this email does not exist in the system."
+        assert r.json()["detail"] == "The user with this phone number does not exist in the system."
 
     def test_reset_password_inactive_user(self, client: TestClient, db: Session) -> None:
         """Test password reset for inactive user."""
-        email = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
         new_password = random_lower_string()
 
         user_create = UserCreate(
-            email=email,
+            phone_number=phone_number,
             full_name="Test User",
             password=password,
             is_active=False,  # Inactive user
             is_superuser=False,
         )
         create_user(session=db, user_create=user_create)
-        token = generate_password_reset_token(email=email)
+        token = generate_password_reset_token(phone_number=phone_number)
         data = {"new_password": new_password, "token": token}
 
         r = client.post(
@@ -328,9 +332,9 @@ class TestPasswordRecoveryHtmlContent:
         self, client: TestClient, superuser_token_headers: dict[str, str]
     ) -> None:
         """Test successful HTML content generation for password recovery."""
-        email = settings.EMAIL_TEST_USER
+        phone_number = settings.PHONE_TEST_USER
         r = client.post(
-            f"{settings.API_V1_STR}/password-recovery-html-content/{email}",
+            f"{settings.API_V1_STR}/password-recovery-html-content/{phone_number}",
             headers=superuser_token_headers,
         )
         assert r.status_code == 200
@@ -346,21 +350,21 @@ class TestPasswordRecoveryHtmlContent:
             headers=superuser_token_headers,
         )
         assert r.status_code == 404
-        assert r.json()["detail"] == "The user with this username does not exist in the system."
+        assert r.json()["detail"] == "The user with this phone number does not exist in the system."
 
     def test_recovery_password_html_content_requires_superuser(
         self, client: TestClient, normal_user_token_headers: dict[str, str]
     ) -> None:
         """Test that HTML content generation requires superuser privileges."""
-        email = settings.EMAIL_TEST_USER
+        phone_number = settings.PHONE_TEST_USER
         r = client.post(
-            f"{settings.API_V1_STR}/password-recovery-html-content/{email}",
+            f"{settings.API_V1_STR}/password-recovery-html-content/{phone_number}",
             headers=normal_user_token_headers,
         )
         assert r.status_code == 403
 
     def test_recovery_password_html_content_no_auth(self, client: TestClient) -> None:
         """Test HTML content generation without authentication."""
-        email = settings.EMAIL_TEST_USER
-        r = client.post(f"{settings.API_V1_STR}/password-recovery-html-content/{email}")
+        phone_number = settings.PHONE_TEST_USER
+        r = client.post(f"{settings.API_V1_STR}/password-recovery-html-content/{phone_number}")
         assert r.status_code == 401

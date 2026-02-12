@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User
-
+from tests.utils.utils import random_phone
 
 class TestPrivateUserCreate:
     """Test POST /private/users/ endpoint."""
@@ -15,7 +15,7 @@ class TestPrivateUserCreate:
     def test_create_user_success(self, client: TestClient, db: Session) -> None:
         """Test successful user creation via private endpoint."""
         user_data = {
-            "email": "comprehensivePrivateUser@example.com",
+            "phone_number": "1234567890",
             "password": "password123",
             "full_name": "Test User",
         }
@@ -30,21 +30,22 @@ class TestPrivateUserCreate:
 
         # Verify response structure
         assert "id" in response_data
-        assert response_data["email"] == "comprehensivePrivateUser@example.com"
+        assert response_data["phone_number"] == "1234567890"
         assert response_data["full_name"] == "Test User"
         assert "hashed_password" not in response_data  # Should not be in response
 
         # Verify user was created in database
         user = db.exec(select(User).where(User.id == response_data["id"])).first()
         assert user is not None
-        assert user.email == "comprehensivePrivateUser@example.com"
+        assert user.phone_number == "1234567890"
         assert user.full_name == "Test User"
         assert verify_password("password123", user.hashed_password)
 
     def test_create_user_with_optional_fields(self, client: TestClient, db: Session) -> None:
         """Test user creation with optional fields."""
+        phone_number = random_phone()
         user_data = {
-            "email": "test2@example.com",
+            "phone_number": phone_number,
             "password": "password123",
             "full_name": "Test User 2",
             "is_verified": True,
@@ -57,17 +58,17 @@ class TestPrivateUserCreate:
 
         assert r.status_code == 200
         response_data = r.json()
-        assert response_data["email"] == "test2@example.com"
+        assert response_data["phone_number"] == phone_number
         assert response_data["full_name"] == "Test User 2"
 
         # Verify user was created in database
         user = db.exec(select(User).where(User.id == response_data["id"])).first()
         assert user is not None
-        assert user.email == "test2@example.com"
+        assert user.phone_number == phone_number
         assert user.full_name == "Test User 2"
 
-    def test_create_user_missing_email(self, client: TestClient) -> None:
-        """Test user creation without email."""
+    def test_create_user_missing_phone_number(self, client: TestClient) -> None:
+        """Test user creation without phone number."""
         user_data = {
             "password": "password123",
             "full_name": "Test User",
@@ -119,10 +120,10 @@ class TestPrivateUserCreate:
 
         assert r.status_code == 422  # Validation error
 
-    def test_create_user_invalid_email_format(self, client: TestClient) -> None:
-        """Test user creation with invalid email format."""
+    def test_create_user_invalid_phone_format(self, client: TestClient) -> None:
+        """Test user creation with invalid phone number format."""
         user_data = {
-            "email": "invalid-email-format",
+            "phone_number": "invalid-phone-number",
             "password": "password123",
             "full_name": "Test User",
         }
@@ -233,7 +234,7 @@ class TestPrivateUserCreate:
     def test_create_user_special_characters_in_name(self, client: TestClient, db: Session) -> None:
         """Test user creation with special characters in full name."""
         user_data = {
-            "email": "josemaria@example.com",
+            "phone_number": "+1234567894",
             "password": "password123",
             "full_name": "José María O'Connor-Smith",
         }
@@ -253,9 +254,9 @@ class TestPrivateUserCreate:
         assert user.full_name == "José María O'Connor-Smith"
 
     def test_create_user_unicode_email(self, client: TestClient) -> None:
-        """Test user creation with unicode characters in email."""
+        """Test user creation with unicode characters in phone number."""
         user_data = {
-            "email": "tëst@ëxämplë.com",
+            "phone_number": "tëst@ëxämplë.com",
             "password": "password123",
             "full_name": "Test User",
         }
@@ -265,16 +266,15 @@ class TestPrivateUserCreate:
             json=user_data,
         )
 
-        # This might be valid or invalid depending on email validation rules
-        assert r.status_code in [200, 422]
+        assert r.status_code == 422
 
-    def test_create_user_duplicate_email(self, client: TestClient, db: Session) -> None:
-        """Test user creation with duplicate email."""
-        email = "duplicate@example.com"
+    def test_create_user_duplicate_phone(self, client: TestClient, db: Session) -> None:
+        """Test user creation with duplicate phone number."""
+        phone_number = "+9876543210"
         
         # Create first user
         user_data1 = {
-            "email": email,
+            "phone_number": phone_number,
             "password": "password123",
             "full_name": "First User",
         }
@@ -284,9 +284,9 @@ class TestPrivateUserCreate:
         )
         assert r1.status_code == 200
 
-        # Try to create second user with same email
+        # Try to create second user with same phone number
         user_data2 = {
-            "email": email,
+            "phone_number": phone_number,
             "password": "password456",
             "full_name": "Second User",
         }
@@ -301,7 +301,7 @@ class TestPrivateUserCreate:
     def test_create_user_no_auth_required(self, client: TestClient) -> None:
         """Test that private user creation doesn't require authentication."""
         user_data = {
-            "email": "noauth@example.com",
+            "phone_number": "+1234567898",
             "password": "password123",
             "full_name": "No Auth User",
         }
@@ -313,4 +313,4 @@ class TestPrivateUserCreate:
 
         assert r.status_code == 200
         response_data = r.json()
-        assert response_data["email"] == "noauth@example.com"
+        assert response_data["phone_number"] == "+1234567898"

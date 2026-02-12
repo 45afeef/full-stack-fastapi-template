@@ -6,14 +6,14 @@ from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
 from app.models.travel.enums import ServiceProviderType
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_lower_string, random_phone
 
 
 def test_create_and_delete_provider_workflow(client: TestClient, superuser_token_headers: dict[str, str], db: Session):
     # create a user
-    username = random_email()
+    phone_number = random_phone()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(phone_number=phone_number, password=password)
     user = crud.create_user(session=db, user_create=user_in)
 
     provider_data = {
@@ -35,9 +35,9 @@ def test_create_and_delete_provider_workflow(client: TestClient, superuser_token
 
 def test_stay_unit_permissions(client: TestClient, superuser_token_headers: dict[str, str], db: Session):
     # create user and provider
-    username = random_email()
+    phone_number = random_phone()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(phone_number=phone_number, password=password)
     user = crud.create_user(session=db, user_create=user_in)
 
     provider_data = {
@@ -57,7 +57,7 @@ def test_stay_unit_permissions(client: TestClient, superuser_token_headers: dict
     assert r.status_code == 200
 
     # normal user should not list units unless agency staff
-    login_data = {"username": username, "password": password}
+    login_data = {"username": phone_number, "password": password}
     r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
     tokens = r.json()
     user_headers = {"Authorization": f"Bearer {tokens['access_token']}"}

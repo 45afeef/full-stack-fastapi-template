@@ -15,7 +15,7 @@ from app.models import User, UserCreate
 from app.models.travel.providers import ServiceProvider
 from app.models.travel.enums import ServiceProviderType, StaffRole
 from app.models.travel.stay import StayUnit
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_phone, random_lower_string
 
 
 class TestUserToAgencyToStaffWorkflow:
@@ -32,14 +32,14 @@ class TestUserToAgencyToStaffWorkflow:
         This demonstrates the proper order of operations.
         """
         # Step 1: Create users (prerequisite for agency creation)
-        username1 = random_email()
+        phone_number1 = random_phone()
         password1 = random_lower_string()
-        user_in1 = UserCreate(email=username1, password=password1)
+        user_in1 = UserCreate(phone_number=phone_number1, password=password1)
         user1 = crud.create_user(session=db, user_create=user_in1)
 
-        username2 = random_email()
+        phone_number2 = random_phone()
         password2 = random_lower_string()
-        user_in2 = UserCreate(email=username2, password=password2)
+        user_in2 = UserCreate(phone_number=phone_number2, password=password2)
         user2 = crud.create_user(session=db, user_create=user_in2)
 
         # Step 2: Create travel agency (requires user1 to exist)
@@ -74,7 +74,7 @@ class TestUserToAgencyToStaffWorkflow:
 
         # Step 4: Verify that user2 is now agency staff and can list units
         # First, get authentication token for user2
-        login_data = {"username": username2, "password": password2}
+        login_data = {"username": phone_number2, "password": password2}
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
         assert r.status_code == 200
         tokens = r.json()
@@ -97,9 +97,9 @@ class TestUserToAgencyToStaffWorkflow:
         This demonstrates the dependency requirement.
         """
         # Create a user
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         # Try to assign staff to non-existent agency
@@ -124,13 +124,13 @@ class TestUserToAgencyToStaffWorkflow:
         This demonstrates the permission requirement.
         """
         # Create a user but don't assign them as agency staff
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         crud.create_user(session=db, user_create=user_in)
 
         # Get authentication token for the user
-        login_data = {"username": username, "password": password}
+        login_data = {"username": phone_number, "password": password}
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
         assert r.status_code == 200
         tokens = r.json()
@@ -155,9 +155,9 @@ class TestProviderToUnitWorkflow:
         Test the complete workflow from provider creation to unit creation.
         """
         # Step 1: Create a user (prerequisite for provider creation)
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         # Step 2: Create stay provider
@@ -233,11 +233,11 @@ class TestComplexWorkflowWithMultipleEntities:
         # Create multiple users
         users = []
         for i in range(3):
-            username = random_email()
+            phone_number = random_phone()
             password = random_lower_string()
-            user_in = UserCreate(email=username, password=password)
+            user_in = UserCreate(phone_number=phone_number, password=password)
             user = crud.create_user(session=db, user_create=user_in)
-            users.append({"user": user, "username": username, "password": password})
+            users.append({"user": user, "phone_number": phone_number, "password": password})
 
         # Create multiple agencies
         agencies = []
@@ -332,9 +332,9 @@ class TestComplexWorkflowWithMultipleEntities:
         Test workflow with filtering and pagination capabilities.
         """
         # Create user, agency, staff, provider, and units
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         # Create agency
@@ -392,7 +392,7 @@ class TestComplexWorkflowWithMultipleEntities:
             assert r.status_code == 200
 
         # Get authentication token for the user
-        login_data = {"username": username, "password": password}
+        login_data = {"username": phone_number, "password": password}
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
         assert r.status_code == 200
         tokens = r.json()
@@ -458,13 +458,13 @@ class TestWorkflowErrorHandling:
         Test workflow with unauthorized access attempts.
         """
         # Create a normal user
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         crud.create_user(session=db, user_create=user_in)
 
         # Get authentication token for the user
-        login_data = {"username": username, "password": password}
+        login_data = {"username": phone_number, "password": password}
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
         assert r.status_code == 200
         tokens = r.json()
