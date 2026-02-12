@@ -237,7 +237,7 @@ class TestComplexWorkflowWithMultipleEntities:
             password = random_lower_string()
             user_in = UserCreate(phone_number=phone_number, password=password)
             user = crud.create_user(session=db, user_create=user_in)
-            users.append({"user": user, "phone_number": phone_number, "password": password})
+            users.append({"user": user, "username": phone_number, "password": password})
 
         # Create multiple agencies
         agencies = []
