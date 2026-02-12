@@ -63,7 +63,7 @@ class StayServiceProvider(SQLModel, table=True):
 class TravelAgency(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     agency_name: str = Field(nullable=False)
-    contact_email: Optional[str] = Field(default=None)
+    contact_email: Optional[str] = Field(nullable=False)
     location_id: Optional[UUID] = Field(default=None, foreign_key="location.id")
     created_by: UUID = Field(foreign_key="user.id")
     created_at: Optional[datetime] = Field(
