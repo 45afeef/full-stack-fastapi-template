@@ -78,6 +78,43 @@ class TestAgencies:
         )
         assert r.status_code == 422  # Validation error
 
+    # Added test for missing mandatory fields
+    # The API should return a 422 error if required fields are missing in the request payload
+    # This test ensures that the API properly validates incoming data and enforces required fields for agency creation
+    def test_create_agency_missing_required_fields(
+        self, client: TestClient, superuser_token_headers: dict[str, str]
+    ) -> None:
+        """Test travel agency creation with missing required fields."""
+        # 'agency_name' is a required field, so we omit it to test validation
+        agency_data = {
+            "contact_email": "contact@acme.com",
+            "created_by": str(uuid.uuid4()),
+        }
+
+        r = client.post(
+            f"{settings.API_V1_STR}/travel-agency",
+            headers=superuser_token_headers,
+            json=agency_data,
+        )
+        assert r.status_code == 422  # Validation error 
+        assert "agency_name" in r.json()["detail"][0]["loc"]  # Ensure the error is about the missing agency_name field
+        
+        # 'contact_email' is a required field, so we omit it to test validation
+        agency_data = {
+            "agency_name": "ACME Travel Agency",
+            "created_by": str(uuid.uuid4()),
+        }
+
+        r = client.post(
+            f"{settings.API_V1_STR}/travel-agency",
+            headers=superuser_token_headers,
+            json=agency_data,
+        )
+        assert r.status_code == 422  # Validation error 
+        assert "contact_email" in r.json()["detail"][0]["loc"]  # Ensure the error is about the missing contact_email field
+
+
+
     def test_create_agency_invalid_email(
         self, client: TestClient, superuser_token_headers: dict[str, str], db: Session
     ) -> None:

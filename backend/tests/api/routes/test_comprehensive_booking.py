@@ -23,8 +23,8 @@ class TestBookingFull:
         owner2_headers = authentication_token_from_email(client=client, email=owner2_email, db=db)
         owner2 = crud.get_user_by_email(session=db, email=owner2_email)
 
-        agency_a = crud.create_travel_agency(session=db, agency={"agency_name": "A", "created_by": str(owner1.id)})
-        agency_b = crud.create_travel_agency(session=db, agency={"agency_name": "B", "created_by": str(owner2.id)})
+        agency_a = crud.create_travel_agency(session=db, agency={"agency_name": "A", "created_by": str(owner1.id), "contact_email": random_email()})
+        agency_b = crud.create_travel_agency(session=db, agency={"agency_name": "B", "created_by": str(owner2.id), "contact_email": random_email()})
 
         # create staff for agency A
         staff_email = random_email()
@@ -64,7 +64,7 @@ class TestBookingFull:
         owner_email = random_email()
         owner_headers = authentication_token_from_email(client=client, email=owner_email, db=db)
         owner = crud.get_user_by_email(session=db, email=owner_email)
-        agency = crud.create_travel_agency(session=db, agency={"agency_name": "Test", "created_by": str(owner.id)})
+        agency = crud.create_travel_agency(session=db, agency={"agency_name": "Test", "created_by": str(owner.id), "contact_email": random_email()})
 
         staff_email = random_email()
         staff_headers = authentication_token_from_email(client=client, email=staff_email, db=db)
@@ -80,7 +80,7 @@ class TestBookingFull:
         owner_email = random_email()
         owner_headers = authentication_token_from_email(client=client, email=owner_email, db=db)
         owner = crud.get_user_by_email(session=db, email=owner_email)
-        agency = crud.create_travel_agency(session=db, agency={"agency_name": "Test2", "created_by": str(owner.id)})
+        agency = crud.create_travel_agency(session=db, agency={"agency_name": "Test2", "created_by": str(owner.id), "contact_email": random_email()})
 
         staff_email = random_email()
         staff_headers = authentication_token_from_email(client=client, email=staff_email, db=db)
@@ -117,12 +117,12 @@ class TestBookingFull:
         owner1_email = random_email()
         owner1_headers = authentication_token_from_email(client=client, email=owner1_email, db=db)
         owner1 = crud.get_user_by_email(session=db, email=owner1_email)
-        agency1 = crud.create_travel_agency(session=db, agency={"agency_name": "One", "created_by": str(owner1.id)})
+        agency1 = crud.create_travel_agency(session=db, agency={"agency_name": "One", "created_by": str(owner1.id), "contact_email": random_email()})
 
         owner2_email = random_email()
         owner2_headers = authentication_token_from_email(client=client, email=owner2_email, db=db)
         owner2 = crud.get_user_by_email(session=db, email=owner2_email)
-        agency2 = crud.create_travel_agency(session=db, agency={"agency_name": "Two", "created_by": str(owner2.id)})
+        agency2 = crud.create_travel_agency(session=db, agency={"agency_name": "Two", "created_by": str(owner2.id), "contact_email": random_email()})
 
         # staff1
         staff1_email = random_email()
@@ -169,7 +169,7 @@ class TestBookingFull:
         owner_email = random_email()
         owner_headers = authentication_token_from_email(client=client, email=owner_email, db=db)
         owner = crud.get_user_by_email(session=db, email=owner_email)
-        agency = crud.create_travel_agency(session=db, agency={"agency_name": "OwnerTest", "created_by": str(owner.id)})
+        agency = crud.create_travel_agency(session=db, agency={"agency_name": "OwnerTest", "created_by": str(owner.id), "contact_email": random_email()})
 
         # assign owner as staff
         crud.assign_agency_staff(session=db, staff={"user_id": str(owner.id), "travel_agency_id": str(agency.id), "role": "OWNER"})
@@ -184,7 +184,7 @@ class TestBookingFull:
         other_owner_email = random_email()
         authentication_token_from_email(client=client, email=other_owner_email, db=db)
         other_owner = crud.get_user_by_email(session=db, email=other_owner_email)
-        other_agency = crud.create_travel_agency(session=db, agency={"agency_name": "Other", "created_by": str(other_owner.id)})
+        other_agency = crud.create_travel_agency(session=db, agency={"agency_name": "Other", "created_by": str(other_owner.id), "contact_email": random_email()})
         other_staff_email = random_email()
         other_staff_headers = authentication_token_from_email(client=client, email=other_staff_email, db=db)
         other_staff_user = crud.get_user_by_email(session=db, email=other_staff_email)
