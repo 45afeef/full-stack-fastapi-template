@@ -17,6 +17,7 @@ from app.utils import (
     send_email,
     verify_password_reset_token,
 )
+from app.models import Message, Token, UserPublic
 
 router = APIRouter(tags=["login"])
 
@@ -40,7 +41,7 @@ def login_access_token(
     This endpoint implements the OAuth2 "password" grant type commonly used by first-party applications.
 
     Detailed behavior:
-    - Accepts form-encoded fields `username` (user email) and `password` as required by
+    - Accepts form-encoded fields `username` (user phone number) and `password` as required by
       `OAuth2PasswordRequestForm`.
     - Verifies credentials via `crud.authenticate`.
     - If valid and the user is active, creates a JWT access token with an expiration defined
@@ -62,13 +63,13 @@ def login_access_token(
     - 400: Wrong credentials or inactive user. Returns an error detail message.
 
     Example (curl):
-    curl -X POST ".../login/access-token" -d "username=user@example.com&password=secret"
+    curl -X POST ".../login/access-token" -d "username=+1234567890&password=secret"
     """
     user = crud.authenticate(
-        session=session, email=form_data.username, password=form_data.password
+        session=session, phone_number=form_data.username, password=form_data.password
     )
     if not user:
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
+        raise HTTPException(status_code=400, detail="Incorrect phone number or password")
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -101,6 +102,7 @@ def test_token(current_user: CurrentUser) -> Any:
     - 401: If token is missing/invalid (handled by dependency).
     """
     return current_user
+
 
 
 @router.post(

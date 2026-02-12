@@ -14,6 +14,11 @@ def random_email() -> str:
     return f"{random_lower_string()}@{random_lower_string()}.com"
 
 
+def random_phone() -> str:
+    """Generate a random phone number in E.164 format."""
+    return f"+1{random.randint(2000000000, 9999999999)}"
+
+
 def get_superuser_token_headers(client: TestClient) -> dict[str, str]:
     login_data = {
         "username": settings.FIRST_SUPERUSER,

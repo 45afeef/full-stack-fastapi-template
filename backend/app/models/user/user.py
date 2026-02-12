@@ -1,9 +1,9 @@
 from datetime import datetime
-from  typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional
+import re
 import uuid
 
-from pydantic import EmailStr
-
+from pydantic import field_validator
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -12,10 +12,29 @@ from sqlmodel import Column, DateTime, func
 
 # Shared properties
 class UserBase(SQLModel):
-    email: EmailStr = Field(unique=True, index=True, max_length=255)
+    phone_number: str = Field(unique=True, index=True, max_length=20)
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, v: str) -> str:
+        """Validate phone number in E.164 format: +[1-9]d{1,14}"""
+        if not v:
+            raise ValueError("Phone number cannot be empty")
+        
+        # Remove any whitespace
+        v = v.strip()
+        
+        # Check E.164 format: starts with +, followed by 1-15 digits, no leading zero after +
+        if not re.match(r"^\+?[1-9]\d{1,14}$", v):
+            raise ValueError(
+                "Phone number must be in E.164 format (e.g., +1234567890). "
+                "It should start with + followed by country code and number (1-15 digits total)."
+            )
+        
+        return v
 
 
 # Properties to receive via API on creation
@@ -23,21 +42,15 @@ class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
 
 
-class UserRegister(SQLModel):
-    email: EmailStr = Field(max_length=255)
-    password: str = Field(min_length=16, max_length=128)
-    full_name: str | None = Field(default=None, max_length=255)
-
-
 # Properties to receive via API on update, all are optional
 class UserUpdate(UserBase):
-    email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
+    phone_number: str | None = Field(default=None, max_length=20)  # type: ignore
     password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
 class UserUpdateMe(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
-    email: EmailStr | None = Field(default=None, max_length=255)
+    phone_number: str | None = Field(default=None, max_length=20)
 
 
 class UpdatePassword(SQLModel):
