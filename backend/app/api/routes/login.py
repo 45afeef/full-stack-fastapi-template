@@ -17,6 +17,7 @@ from app.utils import (
     send_email,
     verify_password_reset_token,
 )
+from app.models import Message, Token, UserPublic
 
 router = APIRouter(tags=["login"])
 
@@ -40,7 +41,7 @@ def login_access_token(
     This endpoint implements the OAuth2 "password" grant type commonly used by first-party applications.
 
     Detailed behavior:
-    - Accepts form-encoded fields `username` (user email) and `password` as required by
+    - Accepts form-encoded fields `username` (user phone number) and `password` as required by
       `OAuth2PasswordRequestForm`.
     - Verifies credentials via `crud.authenticate`.
     - If valid and the user is active, creates a JWT access token with an expiration defined
@@ -62,13 +63,13 @@ def login_access_token(
     - 400: Wrong credentials or inactive user. Returns an error detail message.
 
     Example (curl):
-    curl -X POST ".../login/access-token" -d "username=user@example.com&password=secret"
+    curl -X POST ".../login/access-token" -d "username=+1234567890&password=secret"
     """
     user = crud.authenticate(
-        session=session, email=form_data.username, password=form_data.password
+        session=session, phone_number=form_data.username, password=form_data.password
     )
     if not user:
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
+        raise HTTPException(status_code=400, detail="Incorrect phone number or password")
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -104,15 +105,16 @@ def test_token(current_user: CurrentUser) -> Any:
 
 
 @router.post(
-    "/password-recovery/{email}",
+    "/password-recovery/{phone_number}",
+    dependencies=[Depends(get_current_active_superuser)],
     response_model=Message,
-    summary="Send password recovery email",
+    summary="(Admin) Create password recovery token for a user",
     description=(
-        "Trigger a password recovery email to the provided email address if a user exists. "
-        "The email includes a one-time token the user can use to reset their password."
+        "Admin-only endpoint that creates a password recovery token for the provided phone number. "
+        "The admin may preview or send the recovery email to the user's registered contact email."
     ),
 )
-def recover_password(email: str, session: SessionDep) -> Message:
+def recover_password(phone_number: str, session: SessionDep) -> Message:
     """
     Start the password recovery flow.
 
@@ -134,23 +136,29 @@ def recover_password(email: str, session: SessionDep) -> Message:
     2. Server emails a reset link containing the token.
     3. Client follows link to a web page which collects the new password and calls `/reset-password/`.
     """
-    user = crud.get_user_by_email(session=session, email=email)
+    user = crud.get_user_by_phone(session=session, phone_number=phone_number)
 
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="The user with this email does not exist in the system.",
+            detail="The user with this phone number does not exist in the system.",
         )
-    password_reset_token = generate_password_reset_token(email=email)
+    password_reset_token = generate_password_reset_token(phone_number=phone_number)
     email_data = generate_reset_password_email(
-        email_to=user.email, email=email, token=password_reset_token
+        email_to=(user.email if hasattr(user, "email") else None),
+        phone_number=phone_number,
+        token=password_reset_token,
     )
-    send_email(
-        email_to=user.email,
-        subject=email_data.subject,
-        html_content=email_data.html_content,
-    )
-    return Message(message="Password recovery email sent")
+    # Send email only if the user has a contact email configured and emails are enabled
+    if getattr(user, "email", None) and settings.emails_enabled:
+        send_email(
+            email_to=user.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content,
+        )
+        return Message(message="Password recovery email sent")
+
+    return Message(message="Password recovery token created (no email sent)")
 
 
 @router.post(
@@ -176,14 +184,14 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
     - 400: Invalid token or inactive user.
     - 404: No user found for the token's email.
     """
-    email = verify_password_reset_token(token=body.token)
-    if not email:
+    identifier = verify_password_reset_token(token=body.token)
+    if not identifier:
         raise HTTPException(status_code=400, detail="Invalid token")
-    user = crud.get_user_by_email(session=session, email=email)
+    user = crud.get_user_by_phone(session=session, phone_number=identifier)
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="The user with this email does not exist in the system.",
+            detail="The user with this phone number does not exist in the system.",
         )
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
@@ -195,7 +203,7 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
 
 
 @router.post(
-    "/password-recovery-html-content/{email}",
+    "/password-recovery-html-content/{phone_number}",
     dependencies=[Depends(get_current_active_superuser)],
     response_class=HTMLResponse,
     summary="(Admin) Preview password recovery HTML email",
@@ -205,7 +213,7 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
         "by `get_current_active_superuser` and should only be used in staging or development."
     ),
 )
-def recover_password_html_content(email: str, session: SessionDep) -> Any:
+def recover_password_html_content(phone_number: str, session: SessionDep) -> Any:
     """
     Return HTML content for the password recovery email (admin/debug).
 
@@ -216,16 +224,18 @@ def recover_password_html_content(email: str, session: SessionDep) -> Any:
     - 200: HTML body of the recovery email.
     - 404: If user not found.
     """
-    user = crud.get_user_by_email(session=session, email=email)
+    user = crud.get_user_by_phone(session=session, phone_number=phone_number)
 
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="The user with this username does not exist in the system.",
+            detail="The user with this phone number does not exist in the system.",
         )
-    password_reset_token = generate_password_reset_token(email=email)
+    password_reset_token = generate_password_reset_token(phone_number=phone_number)
     email_data = generate_reset_password_email(
-        email_to=user.email, email=email, token=password_reset_token
+        email_to=(user.email if hasattr(user, "email") else None),
+        phone_number=phone_number,
+        token=password_reset_token,
     )
 
     return HTMLResponse(

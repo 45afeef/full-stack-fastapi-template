@@ -11,14 +11,14 @@ from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
 from app.models.travel.enums import StaffRole
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_phone, random_lower_string
 
 
 class TestAgencies:
     def test_create_agency_success(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session) -> None:
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         agency_data = {
@@ -78,13 +78,50 @@ class TestAgencies:
         )
         assert r.status_code == 422  # Validation error
 
+    # Added test for missing mandatory fields
+    # The API should return a 422 error if required fields are missing in the request payload
+    # This test ensures that the API properly validates incoming data and enforces required fields for agency creation
+    def test_create_agency_missing_required_fields(
+        self, client: TestClient, superuser_token_headers: dict[str, str]
+    ) -> None:
+        """Test travel agency creation with missing required fields."""
+        # 'agency_name' is a required field, so we omit it to test validation
+        agency_data = {
+            "contact_email": "contact@acme.com",
+            "created_by": str(uuid.uuid4()),
+        }
+
+        r = client.post(
+            f"{settings.API_V1_STR}/travel-agency",
+            headers=superuser_token_headers,
+            json=agency_data,
+        )
+        assert r.status_code == 422  # Validation error 
+        assert "agency_name" in r.json()["detail"][0]["loc"]  # Ensure the error is about the missing agency_name field
+        
+        # 'contact_email' is a required field, so we omit it to test validation
+        agency_data = {
+            "agency_name": "ACME Travel Agency",
+            "created_by": str(uuid.uuid4()),
+        }
+
+        r = client.post(
+            f"{settings.API_V1_STR}/travel-agency",
+            headers=superuser_token_headers,
+            json=agency_data,
+        )
+        assert r.status_code == 422  # Validation error 
+        assert "contact_email" in r.json()["detail"][0]["loc"]  # Ensure the error is about the missing contact_email field
+
+
+
     def test_create_agency_invalid_email(
         self, client: TestClient, superuser_token_headers: dict[str, str], db: Session
     ) -> None:
         """Test travel agency creation with invalid email format."""
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         agency_data = {
@@ -103,14 +140,14 @@ class TestAgencies:
 
 class TestAssignAgencyStaff:
     def test_assign_agency_staff_success(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session) -> None:
-        username1 = random_email()
+        phone_number1 = random_phone()
         password1 = random_lower_string()
-        user_in1 = UserCreate(email=username1, password=password1)
+        user_in1 = UserCreate(phone_number=phone_number1, password=password1)
         user1 = crud.create_user(session=db, user_create=user_in1)
 
-        username2 = random_email()
+        phone_number2 = random_phone()
         password2 = random_lower_string()
-        user_in2 = UserCreate(email=username2, password=password2)
+        user_in2 = UserCreate(phone_number=phone_number2, password=password2)
         user2 = crud.create_user(session=db, user_create=user_in2)
 
         agency_data = {
@@ -135,9 +172,9 @@ class TestAssignAgencyStaff:
         assert "id" in created_staff
 
     def test_assign_agency_staff_agency_not_found(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session) -> None:
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         staff_data = {"user_id": str(user.id), "role": "AGENT"}
@@ -151,9 +188,9 @@ class TestAssignAgencyStaff:
         assert r.json()["detail"] == "Agency not found"
 
     def test_assign_agency_staff_requires_superuser(self, client: TestClient, normal_user_token_headers: dict[str, str], db:Session) -> None:
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        user_in = UserCreate(email=username, password=password)
+        user_in = UserCreate(phone_number=phone_number, password=password)
         user = crud.create_user(session=db, user_create=user_in)
 
         agency_data = {
@@ -200,14 +237,14 @@ class TestGetAgencies:
         db: Session,
     ) -> None:
         """Staff user with no memberships should get empty list."""
-        email = random_email()
+        phone_number = random_phone()
         pwd = random_lower_string()
-        user_in = UserCreate(email=email, password=pwd)
+        user_in = UserCreate(phone_number=phone_number, password=pwd)
         crud.create_user(session=db, user_create=user_in)
 
-        from tests.utils.user import authentication_token_from_email
-        token_headers = authentication_token_from_email(
-            client=client, email=email, db=db
+        from tests.utils.user import authentication_token_from_phone
+        token_headers = authentication_token_from_phone(
+            client=client, phone_number=phone_number, db=db
         )
 
         r = client.get(
@@ -225,15 +262,15 @@ class TestGetAgencies:
     ) -> None:
         """Staff user should see exactly one agency."""
         # Create agency owner
-        owner_email = random_email()
+        owner_phone = random_phone()
         owner_pwd = random_lower_string()
-        owner_in = UserCreate(email=owner_email, password=owner_pwd)
+        owner_in = UserCreate(phone_number=owner_phone, password=owner_pwd)
         owner = crud.create_user(session=db, user_create=owner_in)
 
         # Create staff user
-        staff_email = random_email()
+        staff_phone = random_phone()
         staff_pwd = random_lower_string()
-        staff_in = UserCreate(email=staff_email, password=staff_pwd)
+        staff_in = UserCreate(phone_number=staff_phone, password=staff_pwd)
         staff = crud.create_user(session=db, user_create=staff_in)
 
         # Create agency
@@ -253,9 +290,9 @@ class TestGetAgencies:
             json={"user_id": str(staff.id), "role": StaffRole.AGENT},
         )
 
-        from tests.utils.user import authentication_token_from_email
-        staff_headers = authentication_token_from_email(
-            client=client, email=staff_email, db=db
+        from tests.utils.user import authentication_token_from_phone
+        staff_headers = authentication_token_from_phone(
+            client=client, phone_number=staff_phone, db=db
         )
 
         r = client.get(
@@ -279,16 +316,16 @@ class TestGetAgencies:
         owner = crud.create_user(
             session=db,
             user_create=UserCreate(
-                email=random_email(),
+                phone_number=random_phone(),
                 password=random_lower_string(),
             ),
         )
 
-        staff_email = random_email()
+        staff_phone = random_phone()
         staff_pwd = random_lower_string()
         staff = crud.create_user(
             session=db,
-            user_create=UserCreate(email=staff_email, password=staff_pwd),
+            user_create=UserCreate(phone_number=staff_phone, password=staff_pwd),
         )
 
         agencies = []
@@ -309,9 +346,9 @@ class TestGetAgencies:
                 json={"user_id": str(staff.id), "role": StaffRole.AGENT},
             )
 
-        from tests.utils.user import authentication_token_from_email
-        staff_headers = authentication_token_from_email(
-            client=client, email=staff_email, db=db
+        from tests.utils.user import authentication_token_from_phone
+        staff_headers = authentication_token_from_phone(
+            client=client, phone_number=staff_phone, db=db
         )
 
         r = client.get(
@@ -334,7 +371,7 @@ class TestGetAgencies:
         owner = crud.create_user(
             session=db,
             user_create=UserCreate(
-                email=random_email(),
+                phone_number=random_phone(),
                 password=random_lower_string(),
             ),
         )
@@ -375,11 +412,11 @@ class TestGetAgencies:
         db: Session,
     ) -> None:
         """Creating an agency does not imply staff membership."""
-        email = random_email()
+        phone_number = random_phone()
         pwd = random_lower_string()
         user = crud.create_user(
             session=db,
-            user_create=UserCreate(email=email, password=pwd),
+            user_create=UserCreate(phone_number=phone_number, password=pwd),
         )
 
         crud.create_travel_agency(
@@ -391,9 +428,9 @@ class TestGetAgencies:
             },
         )
 
-        from tests.utils.user import authentication_token_from_email
-        headers = authentication_token_from_email(
-            client=client, email=email, db=db
+        from tests.utils.user import authentication_token_from_phone
+        headers = authentication_token_from_phone(
+            client=client, phone_number=phone_number, db=db
         )
 
         r = client.get(
@@ -411,11 +448,11 @@ class TestGetAgencies:
         db: Session,
     ) -> None:
         # create staff user
-        staff_email = random_email()
+        staff_phone = random_phone()
         staff_pwd = random_lower_string()
         staff = crud.create_user(
             session=db,
-            user_create=UserCreate(email=staff_email, password=staff_pwd),
+            user_create=UserCreate(phone_number=staff_phone, password=staff_pwd),
         )
 
         # create agency
@@ -435,9 +472,9 @@ class TestGetAgencies:
             json={"user_id": str(staff.id), "role": StaffRole.AGENT},
         )
 
-        from tests.utils.user import authentication_token_from_email
-        staff_headers = authentication_token_from_email(
-            client=client, email=staff_email, db=db
+        from tests.utils.user import authentication_token_from_phone
+        staff_headers = authentication_token_from_phone(
+            client=client, phone_number=staff_phone, db=db
         )
 
         r = client.get(

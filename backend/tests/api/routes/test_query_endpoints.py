@@ -8,8 +8,8 @@ from app.models import UserCreate, User
 from sqlmodel import select
 from app.models.travel.enums import AmenityScope, ServiceProviderType
 from app.core.config import settings
-from tests.utils.utils import random_email, random_lower_string
-from tests.utils.user import authentication_token_from_email
+from tests.utils.utils import random_phone, random_lower_string, random_email
+from tests.utils.user import authentication_token_from_phone
 
 
 def create_provider_and_cab(client: TestClient, superuser_headers: dict[str, str], owner_user, vehicle_type="SEDAN"):
@@ -55,7 +55,7 @@ def create_provider_and_driver(client: TestClient, superuser_headers: dict[str, 
     provider_id = provider["id"]
 
     # create profile then driver
-    profile_data = {"full_name": "Driver Test", "primary_email": random_email(), "primary_phone_number": "1234567891", "user_id": str(owner_user.id)}
+    profile_data = {"full_name": "Driver Test", "primary_email": random_email(), "primary_phone_number": random_phone(), "user_id": str(owner_user.id)}
     r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_headers, json=profile_data)
     assert r.status_code == 200
     profile = r.json()
@@ -107,9 +107,9 @@ def create_stay_provider_with_unit(client: TestClient, superuser_headers: dict[s
 class TestQueryEndpoints:
     def test_query_cabs_success_and_invalid(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create owner and provider + cab
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(email=username, password=password))
+        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         provider = create_provider_and_cab(client, superuser_token_headers, owner, vehicle_type="SEDAN")
         provider_id = provider["id"]
 
@@ -135,9 +135,9 @@ class TestQueryEndpoints:
 
 
     def test_query_drivers_success_and_invalid(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(email=username, password=password))
+        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         provider = create_provider_and_driver(client, superuser_token_headers, owner, db)
         provider_id = provider["id"]
 
@@ -153,9 +153,9 @@ class TestQueryEndpoints:
 
     def test_query_stay_units_near_access_and_filters(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create an owner and a stay provider located near (10.0, 10.0)
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(email=username, password=password))
+        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         
         provider, unit = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=10.0, lon=10.0, room_rate=150, amenity="pool")
         # unauthenticated request -> 401
@@ -163,7 +163,7 @@ class TestQueryEndpoints:
         assert r.status_code == 401
 
         # get token headers for this freshly-created normal user
-        normal_user_token_headers = authentication_token_from_email(client=client,  email=username, db=db)
+        normal_user_token_headers = authentication_token_from_phone(client=client, phone_number=phone_number, db=db)
 
         # normal authenticated user (not agency staff) -> 403
         r = client.get(
@@ -202,9 +202,9 @@ class TestQueryEndpoints:
 
     def test_sql_injection_like_input_is_handled(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create owner and stay provider with a unit
-        username = random_email()
+        phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(email=username, password=password))
+        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         provider, unit = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=0.0, lon=0.0, room_rate=50, amenity="wifi")
 
         malicious = "'; DROP TABLE stayunit; --"

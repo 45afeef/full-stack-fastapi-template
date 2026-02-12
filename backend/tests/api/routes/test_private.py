@@ -3,13 +3,14 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.models import User
-
+from tests.utils.utils import random_phone
 
 def test_create_user(client: TestClient, db: Session) -> None:
+    phone_number = random_phone()
     r = client.post(
         f"{settings.API_V1_STR}/private/users/",
         json={
-            "email": "pollo@listo.com",
+            "phone_number": phone_number,
             "password": "password123",
             "full_name": "Pollo Listo",
         },
@@ -22,5 +23,5 @@ def test_create_user(client: TestClient, db: Session) -> None:
     user = db.exec(select(User).where(User.id == data["id"])).first()
 
     assert user
-    assert user.email == "pollo@listo.com"
+    assert user.phone_number == phone_number
     assert user.full_name == "Pollo Listo"

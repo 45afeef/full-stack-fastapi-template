@@ -9,8 +9,8 @@ from app.core.config import settings
 from app.models import User
 from app.models.user.profile import Profile
 from app.models.travel.providers import TravelAgency
-from tests.utils.user import authentication_token_from_email
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.user import authentication_token_from_phone
+from tests.utils.utils import random_phone, random_lower_string
 
 
 class TestBookingRoutes:
@@ -18,23 +18,23 @@ class TestBookingRoutes:
         self, client: TestClient, db: Session, superuser_token_headers: dict[str, str]
     ) -> None:
         # create owner and agency
-        owner_email = random_email()
-        owner_headers = authentication_token_from_email(client=client, email=owner_email, db=db)
-        owner = crud.get_user_by_email(session=db, email=owner_email)
+        owner_phone = random_phone()
+        owner_headers = authentication_token_from_phone(client=client, phone_number=owner_phone, db=db)
+        owner = crud.get_user_by_phone(session=db, phone_number=owner_phone)
 
-        agency_data = {"agency_name": "Test Agency", "created_by": str(owner.id)}
+        agency_data = {"agency_name": "Test Agency", "created_by": str(owner.id), "contact_email": random_phone()}
         agency = crud.create_travel_agency(session=db, agency=agency_data)
 
         # create staff user and assign to agency
-        staff_email = random_email()
-        staff_headers = authentication_token_from_email(client=client, email=staff_email, db=db)
-        staff_user = crud.get_user_by_email(session=db, email=staff_email)
+        staff_phone = random_phone()
+        staff_headers = authentication_token_from_phone(client=client, phone_number=staff_phone, db=db)
+        staff_user = crud.get_user_by_phone(session=db, phone_number=staff_phone)
         staff = crud.assign_agency_staff(session=db, staff={"user_id": str(staff_user.id), "travel_agency_id": str(agency.id)})
 
         # create traveller (profile)
-        traveller_email = random_email()
-        traveller_headers = authentication_token_from_email(client=client, email=traveller_email, db=db)
-        traveller_user = crud.get_user_by_email(session=db, email=traveller_email)
+        traveller_phone = random_phone()
+        traveller_headers = authentication_token_from_phone(client=client, phone_number=traveller_phone, db=db)
+        traveller_user = crud.get_user_by_phone(session=db, phone_number=traveller_phone)
         profile = Profile(user_id=traveller_user.id)
         db.add(profile)
         db.commit()
@@ -79,9 +79,9 @@ class TestBookingRoutes:
 
     def test_non_staff_cannot_create_booking(self, client: TestClient, normal_user_token_headers: dict[str, str], db: Session) -> None:
         # create traveler
-        traveller_email = random_email()
-        traveller_headers = authentication_token_from_email(client=client, email=traveller_email, db=db)
-        traveller_user = crud.get_user_by_email(session=db, email=traveller_email)
+        traveller_phone = random_phone()
+        traveller_headers = authentication_token_from_phone(client=client, phone_number=traveller_phone, db=db)
+        traveller_user = crud.get_user_by_phone(session=db, phone_number=traveller_phone)
         profile = Profile(user_id=traveller_user.id)
         db.add(profile)
         db.commit()

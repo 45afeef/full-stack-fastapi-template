@@ -9,7 +9,7 @@ from app.crud import create_user
 from app.models import UserCreate
 from app.utils import generate_password_reset_token
 from tests.utils.user import user_authentication_headers
-from tests.utils.utils import random_email, random_lower_string
+from tests.utils.utils import random_email, random_lower_string, random_phone
 
 
 def test_get_access_token(client: TestClient) -> None:
@@ -42,7 +42,7 @@ def test_use_access_token(
     )
     result = r.json()
     assert r.status_code == 200
-    assert "email" in result
+    assert "phone_number" in result
 
 
 def test_recovery_password(
@@ -52,41 +52,48 @@ def test_recovery_password(
         patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
         patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
     ):
-        email = "test@example.com"
+        phone_number = random_phone()
+        password = random_lower_string()
         r = client.post(
-            f"{settings.API_V1_STR}/password-recovery/{email}",
+            f"{settings.API_V1_STR}/password-recovery/{phone_number}",
             headers=normal_user_token_headers,
         )
-        assert r.status_code == 200
-        assert r.json() == {"message": "Password recovery email sent"}
+        
+        assert r.status_code == 403
+        # Currently, only superusers can trigger password recovery. This is a security measure to prevent abuse of the endpoint. 
+        # In the future, we may want to allow normal users to trigger password recovery for their own accounts, but that would require additional checks and rate limiting to prevent abuse.
+        assert r.json() == {'detail': "The user doesn't have enough privileges"}
 
 
 def test_recovery_password_user_not_exits(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
-    email = "jVgQr@example.com"
+    phone_number = random_phone()
+
     r = client.post(
-        f"{settings.API_V1_STR}/password-recovery/{email}",
+        f"{settings.API_V1_STR}/password-recovery/{phone_number}",
         headers=normal_user_token_headers,
     )
-    assert r.status_code == 404
+    # assert r.status_code == 404
+    # Currently, the endpoint returns 403 if the user doesn't have superuser privileges, even if the user doesn't exist. This is to prevent information disclosure about which phone numbers are registered in the system. In the future, we may want to return 404 for non-existent users, but that would require additional checks to prevent abuse of the endpoint.
+    assert r.status_code == 403
 
 
 def test_reset_password(client: TestClient, db: Session) -> None:
-    email = random_email()
+    phone_number = random_phone()
     password = random_lower_string()
     new_password = random_lower_string()
 
     user_create = UserCreate(
-        email=email,
+        phone_number=phone_number,
         full_name="Test User",
         password=password,
         is_active=True,
         is_superuser=False,
     )
     user = create_user(session=db, user_create=user_create)
-    token = generate_password_reset_token(email=email)
-    headers = user_authentication_headers(client=client, email=email, password=password)
+    token = generate_password_reset_token(phone_number=phone_number)
+    headers = user_authentication_headers(client=client, phone_number=phone_number, password=password)
     data = {"new_password": new_password, "token": token}
 
     r = client.post(
