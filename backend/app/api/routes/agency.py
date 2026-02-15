@@ -29,11 +29,25 @@ def _is_agency_owner(session: Session, user: User, agency: TravelAgency) -> bool
 
 
 def _enrich_staff_with_user_details(session: Session, staff_list: list[TravelAgencyStaff]) -> list[dict]:
-    """Enrich staff records with user details (name and phone number)."""
+    """Enrich staff records with user details (name and phone number).
+    
+    Uses batch query to fetch all users at once, avoiding N+1 query problem.
+    """
+    if not staff_list:
+        return []
+    
+    # Extract user IDs and fetch all users in a single query
+    user_ids = [staff.user_id for staff in staff_list]
+    user_statement = select(User).where(User.id.in_(user_ids))
+    users = session.exec(user_statement).all()
+    
+    # Build lookup dict for O(1) access
+    user_lookup = {user.id: user for user in users}
+    
+    # Enrich staff data using the lookup
     enriched = []
     for staff in staff_list:
-        user_statement = select(User).where(User.id == staff.user_id)
-        user = session.exec(user_statement).first()
+        user = user_lookup.get(staff.user_id)
         enriched.append({
             "id": staff.id,
             "user_id": staff.user_id,
