@@ -486,3 +486,376 @@ class TestGetAgencies:
         assert len(r.json()) == 1
         assert r.json()[0]["id"] == str(agency.id)
 
+
+class TestListAgencyStaffs:
+    def test_list_agency_staffs_returns_enriched_data(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        """Test that list_agency_staffs returns staff with full_name and phone_number."""
+        # Create owner and staff users
+        owner_phone = random_phone()
+        owner_pwd = random_lower_string()
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=owner_phone,
+                password=owner_pwd,
+                full_name="John Owner",
+            ),
+        )
+
+        staff_phone = random_phone()
+        staff_pwd = random_lower_string()
+        staff = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=staff_phone,
+                password=staff_pwd,
+                full_name="Jane Staff",
+            ),
+        )
+
+        # Create agency
+        agency = crud.create_travel_agency(
+            session=db,
+            agency={
+                "agency_name": "Test Agency",
+                "contact_email": "test@agency.com",
+                "created_by": str(owner.id),
+            },
+        )
+
+        # Assign staff with AGENT role
+        client.post(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+            json={"user_id": str(staff.id), "role": StaffRole.AGENT},
+        )
+
+        # List staff
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+        )
+
+        assert r.status_code == 200
+        staff_list = r.json()
+        assert len(staff_list) == 1
+        staff_data = staff_list[0]
+
+        # Verify enriched fields are present
+        assert staff_data["user_id"] == str(staff.id)
+        assert staff_data["travel_agency_id"] == str(agency.id)
+        assert staff_data["full_name"] == "Jane Staff"
+        assert staff_data["phone_number"] == staff_phone
+        assert staff_data["role"] == "AGENT"
+        assert "id" in staff_data
+
+    def test_list_agency_staffs_multiple_staff(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        """Test listing multiple staff members with different roles."""
+        owner_phone = random_phone()
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=owner_phone,
+                password=random_lower_string(),
+                full_name="Alice Owner",
+            ),
+        )
+
+        # Create multiple staff members
+        staff_members = []
+        for i in range(3):
+            staff = crud.create_user(
+                session=db,
+                user_create=UserCreate(
+                    phone_number=random_phone(),
+                    password=random_lower_string(),
+                    full_name=f"Staff Member {i+1}",
+                ),
+            )
+            staff_members.append(staff)
+
+        # Create agency
+        agency = crud.create_travel_agency(
+            session=db,
+            agency={
+                "agency_name": "Multi Staff Agency",
+                "contact_email": "multi@agency.com",
+                "created_by": str(owner.id),
+            },
+        )
+
+        # Assign staff with different roles
+        roles = [StaffRole.OWNER, StaffRole.AGENT, StaffRole.SUPPORT]
+        for staff, role in zip(staff_members, roles):
+            client.post(
+                f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+                headers=superuser_token_headers,
+                json={"user_id": str(staff.id), "role": role},
+            )
+
+        # List staff
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+        )
+
+        assert r.status_code == 200
+        staff_list = r.json()
+        assert len(staff_list) == 3
+
+        # Verify all staff have enriched data
+        for i, staff_data in enumerate(staff_list):
+            assert staff_data["full_name"] is not None
+            assert staff_data["phone_number"] is not None
+            assert staff_data["role"] == roles[i]
+
+    def test_list_agency_staffs_owner_can_view(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        """Test that agency owner can list staff."""
+        from tests.utils.user import authentication_token_from_phone
+
+        owner_phone = random_phone()
+        owner_pwd = random_lower_string()
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=owner_phone,
+                password=owner_pwd,
+                full_name="Owner User",
+            ),
+        )
+
+        staff_phone = random_phone()
+        staff = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=staff_phone,
+                password=random_lower_string(),
+                full_name="Agent User",
+            ),
+        )
+
+        agency = crud.create_travel_agency(
+            session=db,
+            agency={
+                "agency_name": "Owner Test Agency",
+                "contact_email": "owner@test.com",
+                "created_by": str(owner.id),
+            },
+        )
+
+        # Assign owner to agency
+        client.post(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+            json={"user_id": str(owner.id), "role": StaffRole.OWNER},
+        )
+
+        # Assign another staff
+        client.post(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+            json={"user_id": str(staff.id), "role": StaffRole.AGENT},
+        )
+
+        # Owner lists staff
+        owner_headers = authentication_token_from_phone(
+            client=client, phone_number=owner_phone, db=db
+        )
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=owner_headers,
+        )
+
+        assert r.status_code == 200
+        staff_list = r.json()
+        assert len(staff_list) == 2
+
+    def test_list_agency_staffs_staff_member_can_view(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        """Test that agency staff member can list all staff."""
+        from tests.utils.user import authentication_token_from_phone
+
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=random_phone(),
+                password=random_lower_string(),
+            ),
+        )
+
+        staff_phone = random_phone()
+        staff = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=staff_phone,
+                password=random_lower_string(),
+                full_name="Regular Staff",
+            ),
+        )
+
+        other_staff = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=random_phone(),
+                password=random_lower_string(),
+                full_name="Other Staff",
+            ),
+        )
+
+        agency = crud.create_travel_agency(
+            session=db,
+            agency={
+                "agency_name": "Staff View Agency",
+                "contact_email": "staffview@test.com",
+                "created_by": str(owner.id),
+            },
+        )
+
+        # Assign both staff members
+        client.post(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+            json={"user_id": str(staff.id), "role": StaffRole.AGENT},
+        )
+
+        client.post(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+            json={"user_id": str(other_staff.id), "role": StaffRole.SUPPORT},
+        )
+
+        # Staff member lists all staff
+        staff_headers = authentication_token_from_phone(
+            client=client, phone_number=staff_phone, db=db
+        )
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=staff_headers,
+        )
+
+        assert r.status_code == 200
+        staff_list = r.json()
+        assert len(staff_list) == 2
+
+    def test_list_agency_staffs_unauthorized_user(
+        self,
+        client: TestClient,
+        db: Session,
+    ) -> None:
+        """Test that unauthorized user cannot list staff."""
+        from tests.utils.user import authentication_token_from_phone
+
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=random_phone(),
+                password=random_lower_string(),
+            ),
+        )
+
+        unauthorized_phone = random_phone()
+        unauthorized_user = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=unauthorized_phone,
+                password=random_lower_string(),
+            ),
+        )
+
+        agency = crud.create_travel_agency(
+            session=db,
+            agency={
+                "agency_name": "Private Agency",
+                "contact_email": "private@test.com",
+                "created_by": str(owner.id),
+            },
+        )
+
+        # Unauthorized user attempts to list staff
+        unauthorized_headers = authentication_token_from_phone(
+            client=client, phone_number=unauthorized_phone, db=db
+        )
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=unauthorized_headers,
+        )
+
+        assert r.status_code == 403
+        assert r.json()["detail"] == "Not authorized to list staff"
+
+    def test_list_agency_staffs_agency_not_found(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+    ) -> None:
+        """Test listing staff for non-existent agency returns 404."""
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{uuid.uuid4()}/staffs",
+            headers=superuser_token_headers,
+        )
+
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Agency not found"
+
+    def test_list_agency_staffs_no_staff(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        """Test listing staff for agency with no staff returns empty list."""
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(
+                phone_number=random_phone(),
+                password=random_lower_string(),
+            ),
+        )
+
+        agency = crud.create_travel_agency(
+            session=db,
+            agency={
+                "agency_name": "Empty Agency",
+                "contact_email": "empty@test.com",
+                "created_by": str(owner.id),
+            },
+        )
+
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{agency.id}/staffs",
+            headers=superuser_token_headers,
+        )
+
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_list_agency_staffs_unauthenticated(
+        self,
+        client: TestClient,
+    ) -> None:
+        """Test that unauthenticated request returns 401."""
+        r = client.get(
+            f"{settings.API_V1_STR}/travel-agency/{uuid.uuid4()}/staffs",
+        )
+
+        assert r.status_code == 401
+

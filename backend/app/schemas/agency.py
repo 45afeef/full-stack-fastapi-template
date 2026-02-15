@@ -35,6 +35,8 @@ class AgencyStaffPublic(SQLModel):
     id: UUID
     user_id: UUID
     travel_agency_id: UUID
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
     role: Optional[StaffRole] = None
 
 class AgencyStaffUpdate(SQLModel):

@@ -28,6 +28,23 @@ def _is_agency_owner(session: Session, user: User, agency: TravelAgency) -> bool
     return found is not None
 
 
+def _enrich_staff_with_user_details(session: Session, staff_list: list[TravelAgencyStaff]) -> list[dict]:
+    """Enrich staff records with user details (name and phone number)."""
+    enriched = []
+    for staff in staff_list:
+        user_statement = select(User).where(User.id == staff.user_id)
+        user = session.exec(user_statement).first()
+        enriched.append({
+            "id": staff.id,
+            "user_id": staff.user_id,
+            "travel_agency_id": staff.travel_agency_id,
+            "full_name": user.full_name if user else None,
+            "phone_number": user.phone_number if user else None,
+            "role": staff.role,
+        })
+    return enriched
+
+
 @router.post("", response_model=AgencyPublic, dependencies=[Depends(get_current_active_superuser)])
 def create_agency(*, session: SessionDep, agency: AgencyCreate, current_user: CurrentUser) -> Any:
     """Superuser: create a travel agency."""
@@ -137,13 +154,15 @@ def list_agency_staffs(*, agency_id: uuid.UUID, session: SessionDep, current_use
     # allow superuser
     if current_user.is_superuser or _is_agency_owner(session, current_user, db_agency):
         statement = select(TravelAgencyStaff).where(TravelAgencyStaff.travel_agency_id == agency_id)
-        return session.exec(statement).all()
+        staff_list = session.exec(statement).all()
+        return _enrich_staff_with_user_details(session, staff_list)
     # check if requestor is staff
     statement = select(TravelAgencyStaff).where(TravelAgencyStaff.travel_agency_id == agency_id).where(TravelAgencyStaff.user_id == current_user.id)
     found = session.exec(statement).first()
     if found:
         statement = select(TravelAgencyStaff).where(TravelAgencyStaff.travel_agency_id == agency_id)
-        return session.exec(statement).all()
+        staff_list = session.exec(statement).all()
+        return _enrich_staff_with_user_details(session, staff_list)
     raise HTTPException(status_code=403, detail="Not authorized to list staff")
 
 

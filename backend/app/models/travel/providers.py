@@ -8,6 +8,9 @@ from sqlmodel import Column, DateTime, func
 
 from .enums import ServiceProviderType, StaffRole
 
+if TYPE_CHECKING:
+    from app.models.user import User
+
 
 class ServiceProvider(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -94,6 +97,7 @@ class TravelAgencyStaff(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
     )
+    user: Optional["User"] = Relationship(back_populates=None)
 
 
 __all__ = [
