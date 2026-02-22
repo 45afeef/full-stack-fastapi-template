@@ -29,6 +29,13 @@ def create_cab(*, provider_id: uuid.UUID, session: SessionDep, cab: CabCreate) -
     sp = session.get(CabServiceProvider, provider_id)
     if not sp:
         raise HTTPException(status_code=400, detail="Provider is not a cab provider")
+    # TODO - validate cab data (e.g. license plate format)
+    
+    # ensure cab with same license plate doesn't already exist
+    existing_cab = session.query(Cab).filter_by(vehicle_number=cab.vehicle_number).first()
+    if existing_cab:
+        raise HTTPException(status_code=400, detail="Cab with same license plate (vehicle_number) already exists")
+    
     # create cab
     cab_obj = Cab(**cab.model_dump(), provider_id=provider_id)
     created = crud.create_cab(session=session, cab=cab_obj)
