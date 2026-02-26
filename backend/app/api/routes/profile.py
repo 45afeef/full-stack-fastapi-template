@@ -63,12 +63,13 @@ def update_profile_by_id(
     """
     Update a profile by ID if created by current user.
     """
-    if profile.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to update this profile")
-
     profile = session.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
+
+    # ensure the current user created it
+    if profile.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this profile")
     
     profile_data = profile_in.model_dump(exclude_unset=True)
     profile.sqlmodel_update(profile_data)

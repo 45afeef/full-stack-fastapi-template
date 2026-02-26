@@ -82,7 +82,7 @@ class TestBookingRoutes:
         traveller_phone = random_phone()
         traveller_headers = authentication_token_from_phone(client=client, phone_number=traveller_phone, db=db)
         traveller_user = crud.get_user_by_phone(session=db, phone_number=traveller_phone)
-        profile = Profile(user_id=traveller_user.id)
+        profile = Profile()  # not linked to any user
         db.add(profile)
         db.commit()
         db.refresh(profile)

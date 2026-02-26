@@ -90,6 +90,15 @@ class TestProviderCRUDAndPermissions:
         assert r.status_code == 200
 
 
+    def test_profile_creation_optional_user(self, client: TestClient, superuser_token_headers: dict[str, str]):
+        # ensure we can create a profile without supplying user_id
+        profile_data = {"first_name": "Optional", "primary_phone_number": random_phone(), "primary_email": random_email()}
+        r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json=profile_data)
+        assert r.status_code == 200
+        p = r.json()
+        assert p.get("user_id") is None
+
+
     def test_cab_and_driver_endpoints(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create owner and provider
         phone_number = random_phone()
@@ -133,12 +142,13 @@ class TestProviderCRUDAndPermissions:
         assert r.json()['detail'][0]['loc'] == ['body', 'profile_id']
         
         # create driver (superuser)
-        # a driver should have a profile so create a profile first
-        profile_data = {"full_name": "Driver One", "primary_email": random_email(), "primary_phone_number": random_phone(),"user_id": str(user.id)}
+        # a driver should have a profile so create a profile first; user_id is optional now
+        profile_data = {"full_name": "Driver One", "primary_email": random_email(), "primary_phone_number": random_phone()}
         r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json=profile_data)
         assert r.status_code == 200
-
         profile = r.json()
+        assert profile.get("user_id") is None
+
         driver_data = {"user_id": str(user.id), "profile_id": str(profile['id'])}        
         r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers", headers=superuser_token_headers, json=driver_data)
         assert r.status_code == 200

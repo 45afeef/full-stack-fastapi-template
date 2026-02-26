@@ -28,10 +28,11 @@ class ProfileBase(SQLModel):
     primary_email: Optional[EmailStr] = Field(default=None, unique=True, index=True, max_length=100)
     secondary_email: Optional[EmailStr] = Field(default=None, unique=True, index=True, max_length=100)
     created_by_user_id: Optional[uuid.UUID] = Field(default=None)
+    user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", nullable=True, index=True, ondelete="CASCADE")
 
 
 class ProfileCreate(ProfileBase):
-    user_id: uuid.UUID = Field(foreign_key="user.id")
+    pass
 
 
 class ProfileUpdate(ProfileBase):
@@ -40,7 +41,6 @@ class ProfileUpdate(ProfileBase):
 
 class Profile(ProfileBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE")    
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
@@ -57,7 +57,6 @@ class Profile(ProfileBase, table=True):
 
 class ProfilePublic(ProfileBase):
     id: uuid.UUID
-    user_id: uuid.UUID
 
 
 class ProfilesPublic(SQLModel):

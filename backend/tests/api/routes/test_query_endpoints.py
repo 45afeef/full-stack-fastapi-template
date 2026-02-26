@@ -55,10 +55,12 @@ def create_provider_and_driver(client: TestClient, superuser_headers: dict[str, 
     provider_id = provider["id"]
 
     # create profile then driver
-    profile_data = {"full_name": "Driver Test", "primary_email": random_email(), "primary_phone_number": random_phone(), "user_id": str(owner_user.id)}
+    # user_id is optional on the profile now; leave it out to exercise nullable behaviour
+    profile_data = {"full_name": "Driver Test", "primary_email": random_email(), "primary_phone_number": random_phone()}
     r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_headers, json=profile_data)
     assert r.status_code == 200
     profile = r.json()
+    assert profile.get("user_id") is None
     driver_data = {"user_id": str(owner_user.id), "profile_id": str(profile['id'])}
     r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers", headers=superuser_headers, json=driver_data)
     assert r.status_code == 200

@@ -36,7 +36,7 @@ class TestBookingFull:
         traveller_phone = random_phone()
         traveller_headers = authentication_token_from_phone(client=client, phone_number=traveller_phone, db=db)
         traveller_user = crud.get_user_by_phone(session=db, phone_number=traveller_phone)
-        profile = Profile(user_id=traveller_user.id)
+        profile = Profile(user_id=traveller_user.id)  # user_id not required but provided
         db.add(profile)
         db.commit()
         db.refresh(profile)
@@ -87,11 +87,11 @@ class TestBookingFull:
         staff_user = crud.get_user_by_phone(session=db, phone_number=staff_phone)
         crud.assign_agency_staff(session=db, staff={"user_id": str(staff_user.id), "travel_agency_id": str(agency.id)})
 
-        # create valid top-level traveler profile
+        # create valid top-level traveler profile (user_id optional)
         traveller_phone = random_phone()
         traveller_headers = authentication_token_from_phone(client=client, phone_number=traveller_phone, db=db)
         traveller_user = crud.get_user_by_phone(session=db, phone_number=traveller_phone)
-        profile = Profile(user_id=traveller_user.id)
+        profile = Profile()
         db.add(profile)
         db.commit()
         db.refresh(profile)
