@@ -30,8 +30,8 @@ class Cab(SQLModel, table=True):
 
 
 class Driver(SQLModel, table=True): 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(primary_key=True, foreign_key="user.id")
+    id: UUID = Field(default_factory=uuid4, primary_key=True, nullable=False)
+    user_id: Optional[UUID] = Field(default=None, foreign_key="user.id", nullable=True)
     profile_id: UUID = Field(foreign_key="profile.id")
     provider_id: UUID = Field(foreign_key="cabserviceprovider.provider_id")
     created_at: Optional[datetime] = Field(

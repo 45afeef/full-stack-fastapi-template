@@ -49,7 +49,7 @@ class BookingCab(SQLModel, table=True):
     pickup_location: Optional[str] = Field(default=None)
     drop_time: Optional[datetime] = Field(default=None)
     drop_location: Optional[str] = Field(default=None)
-    driver_id: Optional[UUID] = Field(default=None, foreign_key="driver.user_id")
+    driver_id: Optional[UUID] = Field(default=None, foreign_key="driver.id")
     rate: Optional[int] = Field(default=None)
     status: Optional[BookingStatus] = Field(default=None)
     notes: Optional[str] = Field(default=None)
