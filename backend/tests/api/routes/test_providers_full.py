@@ -98,6 +98,44 @@ class TestProviderCRUDAndPermissions:
         p = r.json()
         assert p.get("user_id") is None
 
+    def test_profile_creation_conflict_fields(self, client: TestClient, superuser_token_headers: dict[str, str]):
+        # create a profile with unique contact info
+        phone = random_phone()
+        email = random_email()
+        body = {"primary_phone_number": phone, "primary_email": email}
+        r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json=body)
+        assert r.status_code == 200
+
+        # attempting to create another profile with the same primary_phone_number should conflict
+        r = client.post(
+            f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json={"primary_phone_number": phone}
+        )
+        assert r.status_code == 409
+        assert "primary_phone_number" in r.json()["detail"]
+
+        # same for primary_email
+        r = client.post(
+            f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json={"primary_email": email}
+        )
+        if r.status_code != 409:
+            # emit body for debugging
+            print("unexpected email-only response", r.status_code, r.text)
+        assert r.status_code == 409
+        assert "primary_email" in r.json()["detail"]
+
+        # secondaries also collide against existing primary value
+        r = client.post(
+            f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json={"secondary_phone_number": phone}
+        )
+        assert r.status_code == 409
+        assert "secondary_phone_number" in r.json()["detail"]
+
+        r = client.post(
+            f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json={"secondary_email": email}
+        )
+        assert r.status_code == 409
+        assert "secondary_email" in r.json()["detail"]
+
 
     def test_cab_and_driver_endpoints(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create owner and provider
