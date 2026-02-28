@@ -30,13 +30,17 @@ class CabPublic(SQLModel):
 
 
 class DriverCreate(SQLModel):
-    user_id: UUID = None
+    user_id: Optional[UUID] = None
     profile_id: UUID
 
 
 class DriverPublic(SQLModel):
-    user_id: UUID
+    # user_id is optional because drivers may be created without an associated
+    # user account. response validation was previously failing when user_id was
+    # None.
+    user_id: Optional[UUID] = None
     provider_id: UUID
+    profile_id: UUID
     id: Optional[UUID]
 
 

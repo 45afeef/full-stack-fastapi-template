@@ -191,12 +191,26 @@ class TestProviderCRUDAndPermissions:
         r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers", headers=superuser_token_headers, json=driver_data)
         assert r.status_code == 200
 
-        # list drivers as owner
+        # create another driver without user_id (should be allowed and user_id will
+        # be returned as null)
+        driver_data = {"profile_id": str(profile['id'])}
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers",
+            headers=superuser_token_headers,
+            json=driver_data,
+        )
+        assert r.status_code == 200
+        driver = r.json()
+        assert driver.get("user_id") is None
+
+        # list drivers as owner and verify at least one has no user_id
         r = client.post(f"{settings.API_V1_STR}/login/access-token", data={"username": phone_number, "password": password})
         tokens = r.json()
         owner_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
         r = client.get(f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers", headers=owner_headers)
         assert r.status_code == 200
+        drivers = r.json()
+        assert any(d.get("user_id") is None for d in drivers)
 
 
     def test_stay_unit_endpoints(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
