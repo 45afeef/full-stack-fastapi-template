@@ -108,6 +108,20 @@ def create_stay_amenity(*, session: Session, amenity: dict | StayAmenity) -> Sta
     return obj
 
 
+def list_stay_amenities(
+    *,
+    session: Session,
+    provider_id: str,
+    unit_id: str,
+) -> list[StayAmenity]:
+    statement = (
+        select(StayAmenity)
+        .where(StayAmenity.stay_service_provider_id == provider_id)
+        .where(StayAmenity.stay_unit_id == unit_id)
+    )
+    return session.exec(statement).all()
+
+
 def create_travel_agency(*, session: Session, agency: dict | TravelAgency) -> TravelAgency:
     if isinstance(agency, dict):
         obj = TravelAgency(**agency)

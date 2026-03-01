@@ -24,17 +24,19 @@ class StayUnit(SQLModel, table=True):
     )
 
 
+# database table representing an amenity attached to a stay unit.  this
+# class contains all the fields required for persistence; transport-layer
+# schemas are defined separately under ``app.schemas.provider.stays``.
 class StayAmenity(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    stay_service_provider_id: UUID = Field(foreign_key="stayserviceprovider.provider_id")
     stay_unit_id: UUID = Field(foreign_key="stayunit.id")
+    stay_service_provider_id: UUID = Field(foreign_key="stayserviceprovider.provider_id")
     amenity_scope: AmenityScope = Field(nullable=False)
     amenity: str = Field(nullable=False)
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
-
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),

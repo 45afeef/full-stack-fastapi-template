@@ -1,6 +1,9 @@
 from typing import Optional, List
 from uuid import UUID
+from datetime import datetime
 from sqlmodel import SQLModel
+
+from app.models.travel.enums import AmenityScope
 
 class StayUnitCreate(SQLModel):
     name: str
@@ -41,9 +44,30 @@ class UnitsListWithDistance(SQLModel):
     count: int
 
 
+# ------------- amenity schemas ----------------
+
+class StayAmenityCreate(SQLModel):
+    amenity_scope: AmenityScope
+    amenity: str
+
+
+class StayAmenityPublic(StayAmenityCreate):
+    id: UUID
+    stay_unit_id: UUID
+    stay_service_provider_id: UUID
+
+
+class StayAmenitiesList(SQLModel):
+    data: List[StayAmenityPublic]
+    count: int
+
+
 __all__ = [
     "StayUnitCreate",
     "StayUnitPublic",
     "UnitFilterParams",
     "UnitsList",
+    "StayAmenityCreate",
+    "StayAmenityPublic",
+    "StayAmenitiesList",
 ]

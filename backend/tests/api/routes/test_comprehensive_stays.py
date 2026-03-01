@@ -10,7 +10,7 @@ from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models.travel.enums import ServiceProviderType
+from app.models.travel.enums import ServiceProviderType, AmenityScope
 from app.models import User, UserCreate
 from app.models.travel.providers import ServiceProvider
 from app.models.travel.stay import StayUnit
@@ -218,6 +218,139 @@ class TestCreateStayUnit:
             json=unit_data,
         )
         assert r.status_code == 422  # Validation error
+
+
+class TestStayAmenities:
+    """Tests for the provider stay amenity endpoints."""
+
+    def _create_provider_and_unit(self, client, db, superuser_headers):
+        # helper replicates code from TestCreateStayUnit
+        phone_number = random_phone()
+        password = random_lower_string()
+        user_in = UserCreate(phone_number=phone_number, password=password)
+        user = crud.create_user(session=db, user_create=user_in)
+        provider_data = {
+            "provider_type": ServiceProviderType.STAY,
+            "provider_name": "Amenity Hotel",
+            "owner_id": str(user.id),
+            "created_by": str(user.id),
+        }
+        provider = ServiceProvider(**provider_data)
+        created_provider = crud.create_service_provider(session=db, provider=provider)
+        crud.create_stay_provider_row(session=db, provider_id=created_provider.id)
+
+        unit_data = {"name": "Suite", "room_rate": 250}
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{created_provider.id}/stay/units",
+            headers=superuser_headers,
+            json=unit_data,
+        )
+        assert r.status_code == 200
+        return created_provider, r.json()
+
+    def test_add_amenity_success(
+        self, client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    ) -> None:
+        provider, unit = self._create_provider_and_unit(client, db, superuser_token_headers)
+        amenity_data = {"amenity": "pool", "amenity_scope": AmenityScope.COMMON}
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{provider.id}/stay/units/{unit['id']}/amenities",
+            headers=superuser_token_headers,
+            json=amenity_data,
+        )
+        assert r.status_code == 200
+        created = r.json()
+        assert created["amenity"] == "pool"
+        assert created["amenity_scope"] == "COMMON"
+        assert created["stay_unit_id"] == unit["id"]
+        assert created["stay_service_provider_id"] == str(provider.id)
+
+    def test_add_amenity_provider_not_found(
+        self, client: TestClient, superuser_token_headers: dict[str, str]
+    ) -> None:
+        amenity_data = {"amenity": "wifi", "amenity_scope": AmenityScope.PRIVATE}
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{uuid.uuid4()}/stay/units/{uuid.uuid4()}/amenities",
+            headers=superuser_token_headers,
+            json=amenity_data,
+        )
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Provider not found"
+
+    def test_add_amenity_unit_not_found(
+        self, client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    ) -> None:
+        # provider exists but unit does not
+        phone_number = random_phone()
+        password = random_lower_string()
+        user_in = UserCreate(phone_number=phone_number, password=password)
+        user = crud.create_user(session=db, user_create=user_in)
+        provider_data = {
+            "provider_type": ServiceProviderType.STAY,
+            "provider_name": "NoUnit Hotel",
+            "owner_id": str(user.id),
+            "created_by": str(user.id),
+        }
+        provider = ServiceProvider(**provider_data)
+        created_provider = crud.create_service_provider(session=db, provider=provider)
+        crud.create_stay_provider_row(session=db, provider_id=created_provider.id)
+
+        amenity_data = {"amenity": "spa", "amenity_scope": AmenityScope.ROOM}
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{created_provider.id}/stay/units/{uuid.uuid4()}/amenities",
+            headers=superuser_token_headers,
+            json=amenity_data,
+        )
+        assert r.status_code == 404
+        assert r.json()["detail"] == "Stay unit not found"
+
+    def test_add_amenity_requires_superuser(
+        self, client: TestClient, normal_user_token_headers: dict[str, str]
+    ) -> None:
+        amenity_data = {"amenity": "gym", "amenity_scope": AmenityScope.COMMON}
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{uuid.uuid4()}/stay/units/{uuid.uuid4()}/amenities",
+            headers=normal_user_token_headers,
+            json=amenity_data,
+        )
+        assert r.status_code == 403
+
+    def test_list_amenities_success(
+        self, client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    ) -> None:
+        provider, unit = self._create_provider_and_unit(client, db, superuser_token_headers)
+        # add two amenities
+        for a in ("pool", "wifi"):
+            r = client.post(
+                f"{settings.API_V1_STR}/providers/{provider.id}/stay/units/{unit['id']}/amenities",
+                headers=superuser_token_headers,
+                json={"amenity": a, "amenity_scope": AmenityScope.COMMON},
+            )
+            assert r.status_code == 200
+
+        r = client.get(
+            f"{settings.API_V1_STR}/providers/{provider.id}/stay/units/{unit['id']}/amenities",
+            headers=superuser_token_headers,
+        )
+        assert r.status_code == 200
+        payload = r.json()
+        assert payload["count"] == 2
+        assert isinstance(payload["data"], list)
+
+    def test_list_amenities_requires_owner_or_superuser(
+        self,
+        client: TestClient,
+        normal_user_token_headers: dict[str, str],
+        superuser_token_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        # create provider+unit with superuser, then try to list with normal user
+        provider, unit = self._create_provider_and_unit(client, db, superuser_token_headers)
+        r = client.get(
+            f"{settings.API_V1_STR}/providers/{provider.id}/stay/units/{unit['id']}/amenities",
+            headers=normal_user_token_headers,
+        )
+        assert r.status_code == 403
 
 
 # Agency-specific comprehensive tests moved to tests/api/routes/test_agencies.py
