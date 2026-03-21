@@ -203,69 +203,168 @@ class TestQueryEndpoints:
 
 
     def test_query_units_multi_amenities_filter(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
+        """
+        Test multi-amenity filtering with two distant units having different amenities.
+        
+        Scenario:
+        - Unit 1 (North): located at (20.0, 20.0), room_rate=200, amenities: [wifi, ac]
+        - Unit 2 (South): located at (10.0, 10.0), room_rate=100, amenities: [pool, gym]
+        
+        Test Cases:
+        1. Single amenity queries isolate each unit correctly
+        2. Repeated params style (amenities=wifi&amenities=ac) returns only matching units (AND semantics)
+        3. Comma-separated fallback (amenities=wifi,ac) works identically to repeated params
+        4. Duplicate amenities (wifi,wifi) dedupe correctly and still apply AND semantics
+        5. No-match queries (wifi,notexists) return zero results
+        6. Combined filters (amenities + price) narrow results correctly
+        7. Empty amenities param returns all units
+        """
+        # Setup: Create owner and two distant stay providers with units
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
-        provider, unit = create_stay_provider_with_unit(
+        # Unit 1: North location, high price, wifi + ac amenities
+        provider1, unit1 = create_stay_provider_with_unit(
             client,
             superuser_token_headers,
             db,
             owner,
-            lat=15.0,
-            lon=15.0,
+            lat=20.0,
+            lon=20.0,
             room_rate=200,
             amenity="wifi",
         )
+        provider1_id = provider1["id"]
+        unit1_id = unit1["id"]
 
-        provider_id = provider["id"]
-        unit_id = unit["id"]
-
+        # Add second amenity to Unit 1
         r = client.post(
-            f"{settings.API_V1_STR}/providers/{provider_id}/stay/units/{unit_id}/amenities",
+            f"{settings.API_V1_STR}/providers/{provider1_id}/stay/units/{unit1_id}/amenities",
             headers=superuser_token_headers,
-            json={"amenity": "pool", "amenity_scope": AmenityScope.COMMON},
+            json={"amenity": "ac", "amenity_scope": AmenityScope.COMMON},
         )
         assert r.status_code == 200
+        assert r.json()["amenity"] == "ac"
 
-        # single amenity should return results
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi", headers=superuser_token_headers)
-        assert r.status_code == 200
-        assert r.json()["count"] >= 1
+        # Unit 2: South location, low price, pool + gym amenities
+        provider2, unit2 = create_stay_provider_with_unit(
+            client,
+            superuser_token_headers,
+            db,
+            owner,
+            lat=10.0,
+            lon=10.0,
+            room_rate=100,
+            amenity="pool",
+        )
+        provider2_id = provider2["id"]
+        unit2_id = unit2["id"]
 
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=pool", headers=superuser_token_headers)
+        # Add second amenity to Unit 2
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{provider2_id}/stay/units/{unit2_id}/amenities",
+            headers=superuser_token_headers,
+            json={"amenity": "gym", "amenity_scope": AmenityScope.COMMON},
+        )
         assert r.status_code == 200
-        assert r.json()["count"] >= 1
+        assert r.json()["amenity"] == "gym"
 
-        # repeated params style for multi-amenity query
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi&amenities=pool", headers=superuser_token_headers)
+        # Test Case 1: Single amenity queries should isolate each unit
+        r = client.get(f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=wifi", headers=superuser_token_headers)
         assert r.status_code == 200
-        assert r.json()["count"] >= 1
+        assert r.json()["count"] == 1, "Only Unit 1 has wifi"
 
-        # comma-separated fallback style
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,pool", headers=superuser_token_headers)
+        r = client.get(f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=ac", headers=superuser_token_headers)
         assert r.status_code == 200
-        assert r.json()["count"] >= 1
+        assert r.json()["count"] == 1, "Only Unit 1 has ac"
 
-        # duplicate amenity should still succeed and behave as AND semantics
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,wifi", headers=superuser_token_headers)
+        r = client.get(f"{settings.API_V1_STR}/query/units?provider_id={provider2_id}&amenities=pool", headers=superuser_token_headers)
         assert r.status_code == 200
-        assert r.json()["count"] >= 1
+        assert r.json()["count"] == 1, "Only Unit 2 has pool"
 
-        # no-match amenities should return no results
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,notexists", headers=superuser_token_headers)
+        r = client.get(f"{settings.API_V1_STR}/query/units?provider_id={provider2_id}&amenities=gym", headers=superuser_token_headers)
         assert r.status_code == 200
-        assert r.json()["count"] == 0
+        assert r.json()["count"] == 1, "Only Unit 2 has gym"
 
-        # combined query: amenities plus price range
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,pool&min_price=150&max_price=300", headers=superuser_token_headers)
+        # Test Case 2: Repeated params style for multi-amenity query (AND semantics)
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=wifi&amenities=ac",
+            headers=superuser_token_headers
+        )
         assert r.status_code == 200
-        assert r.json()["count"] >= 1
+        assert r.json()["count"] == 1, "Only Unit 1 has both wifi AND ac"
 
-        # empty amenities param should not break and should return all units
-        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=", headers=superuser_token_headers)
+        # Test Case 3: Comma-separated fallback style should work identically
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=wifi,ac",
+            headers=superuser_token_headers
+        )
         assert r.status_code == 200
-        assert r.json()["count"] >= 0
+        assert r.json()["count"] == 1, "Comma-separated (wifi,ac) should return Unit 1 only"
+
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider2_id}&amenities=pool,gym",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 1, "Comma-separated (pool,gym) should return Unit 2 only"
+
+        # Test Case 4: Duplicate amenity should dedupe and still apply AND semantics
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=wifi,wifi",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 1, "Duplicates dedupe; (wifi,wifi) should return Unit 1 only"
+
+        # Test Case 5: No-match amenities should return zero results
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=wifi,notexists",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 0, "Amenity combo (wifi,notexists) matches nothing"
+
+        # Cross-unit combos should also return zero (Unit 1 doesn't have pool)
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=wifi,pool",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 0, "Amenity combo (wifi,pool) spans two units; AND semantics returns 0"
+
+        # Test Case 6: Combined query with amenities + price filters
+        # Unit 1 (room_rate=200): has wifi; price range 150-250 includes it
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=wifi&min_price=150&max_price=250",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 1, "Unit 1 (wifi, rate 200) matches amenity+price filter"
+
+        # Unit 2 (room_rate=100): has pool; price range 150-250 excludes it
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider2_id}&amenities=pool&min_price=150&max_price=250",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 0, "Unit 2 (pool, rate 100) outside price range"
+
+        # Test Case 7: Empty amenities param should return all units from this provider
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider1_id}&amenities=",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 1, "No amenity filter returns Unit 1"
+
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?provider_id={provider2_id}&amenities=",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["count"] == 1, "No amenity filter returns Unit 2"
 
 
     def test_sql_injection_like_input_is_handled(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
