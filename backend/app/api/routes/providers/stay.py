@@ -1,5 +1,5 @@
 import uuid
-from typing import Any
+from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
@@ -58,7 +58,7 @@ def list_stay_units(
     provider_id: uuid.UUID,
     min_price: int | None = Query(default=None),
     max_price: int | None = Query(default=None),
-    amenity: str | None = Query(default=None),
+    amenities: List[str] | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> Any:
@@ -73,7 +73,7 @@ def list_stay_units(
         provider_id=str(provider_id),
         min_price=min_price,
         max_price=max_price,
-        amenity=amenity,
+        amenities=amenities,
         limit=limit,
         offset=offset,
     )

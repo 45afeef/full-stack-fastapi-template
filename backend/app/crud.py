@@ -1,7 +1,7 @@
 import uuid
-from typing import Any
+from typing import Any,List
 
-from sqlmodel import Session, select
+from sqlmodel import Session, select, distinct
 
 from app.core.security import get_password_hash, verify_password
 from app.models import User, UserCreate, UserUpdate
@@ -15,8 +15,7 @@ from app.models.travel.providers import (
 from app.models.travel.stay import StayUnit, StayAmenity
 from app.models.travel.providers import TravelAgency, TravelAgencyStaff
 from sqlalchemy import func
-from sqlmodel import select
-from typing import List
+
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -213,7 +212,7 @@ def list_stay_units(
                 statement.join(StayAmenity, StayAmenity.stay_unit_id == StayUnit.id)
                 .where(StayAmenity.amenity.in_(normalized_amenities))
                 .group_by(StayUnit.id)
-                .having(func.count(StayAmenity.amenity) == len(normalized_amenities))
+                .having(func.count(distinct(StayAmenity.amenity)) == len(normalized_amenities))
             )
 
 
