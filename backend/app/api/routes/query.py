@@ -1,5 +1,5 @@
 import uuid
-from typing import Any
+from typing import Any, List
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -16,6 +16,10 @@ from app.models.travel.enums import VehicleType
 
 router = APIRouter(prefix="/query", tags=["query"])
 
+
+# This endpoint supports both the following ways of amenity url params
+# GET /units?min_price=1000&max_price=5000&amenities=wifi&amenities=ac
+# GET /units?amenities=wifi,pool
 @router.get("/units", response_model=UnitsList)
 def list_stay_units(
     *,
@@ -24,7 +28,7 @@ def list_stay_units(
     provider_id: uuid.UUID | None = Query(default=None),
     min_price: int | None = Query(default=None),
     max_price: int | None = Query(default=None),
-    amenity: str | None = Query(default=None),
+    amenities: List[str] | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> Any:
@@ -32,12 +36,26 @@ def list_stay_units(
     if not current_user.is_superuser and not is_agency_staff(session, current_user):
         raise HTTPException(status_code=403, detail="Not authorized to query stay units")
 
+    # Fallback support to comma-separated value queries like '/units?amenities=wifi,pool'
+    # small parser to convert comma-separated value to amenity list
+    if amenities and len(amenities) == 1 and "," in amenities[0]:
+        amenities = amenities[0].split(",")
+
+    # normalize amenities: strip spaces, remove empty entries, dedupe repeated amenity
+    if amenities:
+        normalized = []
+        for amenity in amenities:
+            candidate = amenity.strip()
+            if candidate and candidate not in normalized:
+                normalized.append(candidate)
+        amenities = normalized or None
+
     units, count = crud.list_stay_units(
         session=session,
         provider_id=str(provider_id) if provider_id else None,
         min_price=min_price,
         max_price=max_price,
-        amenity=amenity,
+        amenities=amenities,
         limit=limit,
         offset=offset,
     )

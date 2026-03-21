@@ -70,7 +70,7 @@ def list_stay_units(
 
     units, count = crud.list_stay_units(
         session=session,
-        provider_id=str(provider_id) if provider_id else None,
+        provider_id=str(provider_id),
         min_price=min_price,
         max_price=max_price,
         amenity=amenity,

@@ -202,6 +202,72 @@ class TestQueryEndpoints:
         assert r.json()["count"] == 0
 
 
+    def test_query_units_multi_amenities_filter(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
+        phone_number = random_phone()
+        password = random_lower_string()
+        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
+
+        provider, unit = create_stay_provider_with_unit(
+            client,
+            superuser_token_headers,
+            db,
+            owner,
+            lat=15.0,
+            lon=15.0,
+            room_rate=200,
+            amenity="wifi",
+        )
+
+        provider_id = provider["id"]
+        unit_id = unit["id"]
+
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{provider_id}/stay/units/{unit_id}/amenities",
+            headers=superuser_token_headers,
+            json={"amenity": "pool", "amenity_scope": AmenityScope.COMMON},
+        )
+        assert r.status_code == 200
+
+        # single amenity should return results
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=pool", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+        # repeated params style for multi-amenity query
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi&amenities=pool", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+        # comma-separated fallback style
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,pool", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+        # duplicate amenity should still succeed and behave as AND semantics
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,wifi", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+        # no-match amenities should return no results
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,notexists", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] == 0
+
+        # combined query: amenities plus price range
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=wifi,pool&min_price=150&max_price=300", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+        # empty amenities param should not break and should return all units
+        r = client.get(f"{settings.API_V1_STR}/query/units?amenities=", headers=superuser_token_headers)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 0
+
+
     def test_sql_injection_like_input_is_handled(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         # create owner and stay provider with a unit
         phone_number = random_phone()

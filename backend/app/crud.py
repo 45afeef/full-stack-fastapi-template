@@ -189,7 +189,7 @@ def list_stay_units(
     provider_id: str | None = None,
     min_price: int | None = None,
     max_price: int | None = None,
-    amenity: str | None = None,
+    amenities: List[str] | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[List[StayUnit], int]:
@@ -201,14 +201,21 @@ def list_stay_units(
     if max_price is not None:
         statement = statement.where(StayUnit.room_rate <= max_price)
     # amenity filtering requires join with StayAmenity
-    if amenity:
-        from sqlmodel import select as _select
+    if amenities:
+        normalized_amenities = []
+        for amenity in amenities:
+            candidate = amenity.strip()
+            if candidate and candidate not in normalized_amenities:
+                normalized_amenities.append(candidate)
 
-        statement = (
-            _select(StayUnit)
-            .join(StayAmenity, StayAmenity.stay_unit_id == StayUnit.id)
-            .where(StayAmenity.amenity == amenity)
-        )
+        if normalized_amenities:
+            statement = (
+                statement.join(StayAmenity, StayAmenity.stay_unit_id == StayUnit.id)
+                .where(StayAmenity.amenity.in_(normalized_amenities))
+                .group_by(StayUnit.id)
+                .having(func.count(StayAmenity.amenity) == len(normalized_amenities))
+            )
+
 
     # compute total count approximately (avoids complex subquery issues)
     total = None
