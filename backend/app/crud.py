@@ -208,12 +208,14 @@ def list_stay_units(
                 normalized_amenities.append(candidate)
 
         if normalized_amenities:
-            statement = (
-                statement.join(StayAmenity, StayAmenity.stay_unit_id == StayUnit.id)
+            subq = (
+                select(StayAmenity.stay_unit_id)
                 .where(StayAmenity.amenity.in_(normalized_amenities))
-                .group_by(StayUnit.id)
-                .having(func.count(distinct(StayAmenity.amenity)) == len(normalized_amenities))
+                .group_by(StayAmenity.stay_unit_id)
+                .having(func.count(distinct(StayAmenity.amenity)) >= len(normalized_amenities))
             )
+
+            statement = statement.where(StayUnit.id.in_(subq))
 
 
     # compute total count approximately (avoids complex subquery issues)
