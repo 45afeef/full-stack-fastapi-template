@@ -56,9 +56,9 @@ def list_stay_units(
     session: SessionDep,
     current_user: CurrentUser,
     provider_id: uuid.UUID,
-    min_price: int | None = Query(default=None),
-    max_price: int | None = Query(default=None),
-    amenities: List[str] | None = Query(default=None),
+    min_price: int = Query(default=0),
+    max_price: int = Query(default=None),
+    amenities: List[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> Any:
