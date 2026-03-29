@@ -48,11 +48,13 @@ class StayServiceProvider(SQLModel, table=True):
     provider_id: UUID = Field(primary_key=True, foreign_key="serviceprovider.id")
     property_type: Optional[str] = Field(default=None)
     room_count: Optional[int] = Field(default=None)
+    optimal_occupancy: Optional[int] = Field(default=None)
+    max_occupancy: Optional[int] = Field(default=None)
+
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
-
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
@@ -66,11 +68,11 @@ class TravelAgency(SQLModel, table=True):
     contact_email: Optional[str] = Field(nullable=False)
     location_id: Optional[UUID] = Field(default=None, foreign_key="location.id")
     created_by: UUID = Field(foreign_key="user.id")
+
     created_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
-
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),

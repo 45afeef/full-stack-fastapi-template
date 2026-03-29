@@ -21,6 +21,8 @@ class StayProviderCreate(BaseProviderCreate):
     provider_type: Literal["STAY"]
     property_type: Optional[str] = None
     room_count: Optional[int] = None
+    optimal_occupancy: Optional[int] = None
+    max_occupancy: Optional[int] = None
 
 
 ProviderCreate = Union[CabProviderCreate, StayProviderCreate]
@@ -42,6 +44,8 @@ class StayProviderPublic(BaseProviderPublic):
     provider_type: Literal["STAY"]
     property_type: Optional[str] = None
     room_count: Optional[int] = None
+    optimal_occupancy: Optional[int] = None
+    max_occupancy: Optional[int] = None
 
 
 ProviderPublic = Union[CabProviderPublic, StayProviderPublic]
