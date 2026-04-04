@@ -20,7 +20,7 @@ Authorization:
 import uuid
 from typing import Any, List
 
-from app.schemas.provider import ProviderPublic, StayProviderPublic
+from app.schemas.provider import ProviderPublic, PublicStayProviderList, StayProviderPublic
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import CurrentUser, SessionDep
@@ -38,7 +38,7 @@ router = APIRouter(prefix="/query", tags=["query"])
 
 
 # Search endpoint for stay providers with flexible filtering:
-@router.get("/stay-providers", response_model=dict)
+@router.get("/stay-providers", response_model=PublicStayProviderList)
 def list_stay_providers(
     *,
     session: SessionDep,
@@ -109,7 +109,7 @@ def list_stay_providers(
         limit=limit,
         offset=offset,
     )
-    return {"data": providers, "count": count}
+    return PublicStayProviderList(data=providers, count=count)
 
 
 # This endpoint supports both the following ways of amenity url params

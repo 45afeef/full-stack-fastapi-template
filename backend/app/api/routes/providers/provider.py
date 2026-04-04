@@ -51,6 +51,8 @@ def create_provider(*, session: SessionDep, provider_in: ProviderCreate) -> Any:
             provider_id=provider.id,
             property_type=provider_in.property_type,
             room_count=provider_in.room_count,
+            optimal_occupancy=provider_in.optimal_occupancy,
+            max_occupancy=provider_in.max_occupancy,
         )
         session.add(stay)
 

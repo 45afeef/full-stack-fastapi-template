@@ -1364,6 +1364,10 @@ class TestQueryEndpoints:
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
             "location_id": str(loc1.id),
+            "property_type": "hotel",
+            "room_count": 1,
+            "optimal_occupancy": 2,
+            "max_occupancy": 2
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=prov1_data)
         assert r.status_code == 201
@@ -1373,7 +1377,7 @@ class TestQueryEndpoints:
         r = client.post(f"{settings.API_V1_STR}/providers/{prov1_id}/stay/units", headers=superuser_token_headers, json=unit1_data)
         assert r.status_code == 200
         
-        # Provider 2: two units, total capacity 5 (3 + 2)
+        # Provider 2: two units, total capacity 5 (3 + 2), provider max_occupancy = 6
         loc2 = Location(id=uuid.uuid4(), latitude=41.0, longitude=41.0)
         db.add(loc2)
         db.commit()
@@ -1384,6 +1388,10 @@ class TestQueryEndpoints:
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
             "location_id": str(loc2.id),
+            "property_type": "apartment",
+            "room_count": 2,
+            "optimal_occupancy": 5,
+            "max_occupancy": 6
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=prov2_data)
         assert r.status_code == 201
@@ -1405,6 +1413,10 @@ class TestQueryEndpoints:
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
             "location_id": str(loc3.id),
+            "property_type": "villa",
+            "room_count": 1,
+            "optimal_occupancy": 6,
+            "max_occupancy": 6
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=prov3_data)
         assert r.status_code == 201
@@ -1438,12 +1450,12 @@ class TestQueryEndpoints:
         assert prov2_id in provider_ids, "Provider 2 (total 5) has capacity >= 3"
         assert prov3_id in provider_ids, "Provider 3 (max_occ 6) has capacity >= 3"
         
-        # Test Case 4: pax_count=6 (should get Provider 3 only)
+        # Test Case 4: pax_count=6 (should get Providers 2 and 3 based on stay-provider max_occupancy)
         r = client.get(f"{settings.API_V1_STR}/query/stay-providers?pax_count=6", headers=superuser_token_headers)
         assert r.status_code == 200
         provider_ids = [p["id"] for p in r.json()["data"]]
         assert prov1_id not in provider_ids, "Provider 1 (max 2) cannot accommodate pax_count 6"
-        assert prov2_id not in provider_ids, "Provider 2 (max unit 3, total 5) cannot accommodate pax_count 6"
+        assert prov2_id in provider_ids, "Provider 2 (provider max_occ 6) can accommodate pax_count 6"
         assert prov3_id in provider_ids, "Provider 3 (max_occ 6) can accommodate pax_count 6"
         
         # Test Case 5: pax_count=7 (no providers)

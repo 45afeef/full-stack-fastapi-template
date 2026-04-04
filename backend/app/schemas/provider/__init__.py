@@ -51,7 +51,14 @@ class StayProviderPublic(BaseProviderPublic):
 ProviderPublic = Union[CabProviderPublic, StayProviderPublic]
 
 
+class PublicStayProviderList(SQLModel):
+    data: list[StayProviderPublic]
+    count: int
+    
+
+
 __all__ = [
     "ProviderCreate",
     "ProviderPublic",
+    "PublicStayProviderList",
 ]

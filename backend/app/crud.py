@@ -210,14 +210,23 @@ def list_stay_providers(
     
     **Return**: Tuple of (results: List[ServiceProvider], count: int)
     """
-    statement = select(ServiceProvider).where(ServiceProvider.provider_type == "STAY")
+    # Start from stay-specific provider rows and join the base provider metadata.
+    statement = (
+        select(ServiceProvider)
+        .join(StayServiceProvider, StayServiceProvider.provider_id == ServiceProvider.id)
+        .where(ServiceProvider.provider_type == "STAY")
+    )
     
     # Filter by location if specified
     if location_id:
         statement = statement.where(ServiceProvider.location_id == location_id)
     
+    # Filter by stay-provider level occupancy if specified
+    if pax_count:
+        statement = statement.where(StayServiceProvider.max_occupancy >= pax_count)
+
     # Check if we have any unit-based filters (price, pax, amenities)
-    has_unit_filters = min_price is not None or max_price is not None or pax_count is not None or amenities
+    has_unit_filters = min_price is not None or max_price is not None or amenities
     
     if has_unit_filters:
         statement = statement.join(StayUnit, StayUnit.provider_id == ServiceProvider.id)
@@ -227,29 +236,6 @@ def list_stay_providers(
             statement = statement.where(StayUnit.room_rate >= min_price)
         if max_price is not None:
             statement = statement.where(StayUnit.room_rate <= max_price)
-        
-        # Filter by occupancy: unit itself or provider's total capacity must meet pax_count
-        if pax_count:
-            # Subquery: sum of max_occupancy per provider
-            provider_capacity_subq = (
-                select(
-                    StayUnit.provider_id,
-                    func.sum(StayUnit.max_occupancy).label("total_capacity")
-                )
-                .group_by(StayUnit.provider_id)
-                .subquery()
-            )
-            
-            # Join and filter: unit has capacity OR provider has total capacity
-            statement = statement.join(
-                provider_capacity_subq,
-                StayUnit.provider_id == provider_capacity_subq.c.provider_id
-            ).where(
-                or_(
-                    StayUnit.max_occupancy >= pax_count,
-                    provider_capacity_subq.c.total_capacity >= pax_count
-                )
-            )
         
         # Filter by amenities using AND semantics: provider must have ALL listed amenities
         if amenities:
