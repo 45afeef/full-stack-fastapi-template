@@ -2,6 +2,7 @@ import uuid
 from typing import Any,List
 
 from sqlmodel import Session, select, distinct, or_
+from sqlalchemy.orm import selectinload
 
 from app.core.security import get_password_hash, verify_password
 from app.models import User, UserCreate, UserUpdate
@@ -193,7 +194,7 @@ def list_stay_providers(
     min_rating: float | None = None,
     limit: int = 100,
     offset: int = 0,
-) -> tuple[List[ServiceProvider], int]:
+) -> tuple[List[StayServiceProvider], int]:
     """
     List stay providers with flexible filtering and pagination.
     
@@ -208,12 +209,12 @@ def list_stay_providers(
     - Results offset by `offset` items
     - Limited to `limit` items per page
     
-    **Return**: Tuple of (results: List[ServiceProvider], count: int)
+    **Return**: Tuple of (results: List[StayServiceProvider], count: int)
     """
     # Start from stay-specific provider rows and join the base provider metadata.
     statement = (
-        select(ServiceProvider)
-        .join(StayServiceProvider, StayServiceProvider.provider_id == ServiceProvider.id)
+        select(StayServiceProvider)
+        .join(ServiceProvider, StayServiceProvider.provider_id == ServiceProvider.id)
         .where(ServiceProvider.provider_type == "STAY")
     )
     
@@ -255,7 +256,11 @@ def list_stay_providers(
         statement = statement.distinct()
     
     # Apply pagination
-    results = session.exec(statement.offset(offset).limit(limit)).all()
+    results = session.exec(
+        statement.options(selectinload(StayServiceProvider.provider))
+        .offset(offset)
+        .limit(limit)
+    ).all()
     count = len(results)
     
     return results, count

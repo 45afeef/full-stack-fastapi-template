@@ -109,7 +109,25 @@ def list_stay_providers(
         limit=limit,
         offset=offset,
     )
-    return PublicStayProviderList(data=providers, count=count)
+
+    stay_provider_list: list[StayProviderPublic] = []
+    for provider in providers:
+        if not provider.provider:
+            continue
+        stay_provider_list.append(
+            StayProviderPublic(
+                id=provider.provider.id,
+                provider_name=provider.provider.provider_name,
+                provider_type=provider.provider.provider_type,
+                location_id=provider.provider.location_id,
+                property_type=provider.property_type,
+                room_count=provider.room_count,
+                optimal_occupancy=provider.optimal_occupancy,
+                max_occupancy=provider.max_occupancy,
+            )
+        )
+
+    return PublicStayProviderList(data=stay_provider_list, count=count)
 
 
 # This endpoint supports both the following ways of amenity url params
