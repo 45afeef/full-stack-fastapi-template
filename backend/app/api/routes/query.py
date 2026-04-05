@@ -205,11 +205,19 @@ def query_cabs(
     lat: float = Query(default=None, description="Latitude: if provided with lon, filters cabs by provider location"),
     lon: float = Query(default=None, description="Longitude: if provided with lat, filters cabs by provider location"),
     radius_km: float = Query(default=5.0, ge=0.1, description="Search radius in kilometers (used with lat/lon)"),
+    min_capacity: int = Query(default=None, ge=1, description="Minimum passenger capacity filter"),
+    max_capacity: int = Query(default=None, ge=1, description="Maximum passenger capacity filter"),
+    min_minimum_rate: int = Query(default=None, ge=0, description="Minimum minimum rate filter"),
+    max_minimum_rate: int = Query(default=None, ge=0, description="Maximum minimum rate filter"),
+    min_per_km_rate: int = Query(default=None, ge=0, description="Minimum per km rate filter"),
+    max_per_km_rate: int = Query(default=None, ge=0, description="Maximum per km rate filter"),
+    min_km_for_minimum_rate: int = Query(default=None, ge=0, description="Minimum km for minimum rate filter"),
+    max_km_for_minimum_rate: int = Query(default=None, ge=0, description="Maximum km for minimum rate filter"),
     limit: int = Query(default=100, ge=1, le=500, description="Max results per page"),
     offset: int = Query(default=0, ge=0, description="Results to skip (pagination)"),
 ):
     """
-    Query cabs with optional vehicle type and location-based provider filtering.
+    Query cabs with optional vehicle type, location-based provider filtering, and capacity/rate filters.
     
     **Authorization**: Public (no authentication required).
     
@@ -220,6 +228,10 @@ def query_cabs(
       - Uses bounding box around (lat, lon) with radius_km to find nearby providers
       - Returns cabs from those nearby providers (not a haversine distance to individual cabs)
     - `radius_km`: Controls the search radius when lat/lon are provided (default 5km)
+    - `min_capacity` / `max_capacity`: Filter by passenger capacity (inclusive bounds)
+    - `min_minimum_rate` / `max_minimum_rate`: Filter by minimum rate (inclusive bounds)
+    - `min_per_km_rate` / `max_per_km_rate`: Filter by per km rate (inclusive bounds)
+    - `min_km_for_minimum_rate` / `max_km_for_minimum_rate`: Filter by km for minimum rate (inclusive bounds)
     
     **Location-Based Search Note**: 
     This is a provider-level filter using provider location, not individual cab location.
@@ -237,6 +249,14 @@ def query_cabs(
         provider_id=str(provider_id) if provider_id else None,
         provider_ids=provider_ids,
         vehicle_type=vehicle_type,
+        min_capacity=min_capacity,
+        max_capacity=max_capacity,
+        min_minimum_rate=min_minimum_rate,
+        max_minimum_rate=max_minimum_rate,
+        min_per_km_rate=min_per_km_rate,
+        max_per_km_rate=max_per_km_rate,
+        min_km_for_minimum_rate=min_km_for_minimum_rate,
+        max_km_for_minimum_rate=max_km_for_minimum_rate,
         limit=limit,
         offset=offset,
     )
@@ -251,11 +271,12 @@ def query_drivers(
     lat: float = Query(default=None, description="Latitude: if provided with lon, filters drivers by provider location"),
     lon: float = Query(default=None, description="Longitude: if provided with lat, filters drivers by provider location"),
     radius_km: float = Query(default=5.0, ge=0.1, description="Search radius in kilometers (used with lat/lon)"),
+    min_capacity: int = Query(default=None, ge=1, description="Minimum capacity of associated cabs filter"),
     limit: int = Query(default=100, ge=1, le=500, description="Max results per page"),
     offset: int = Query(default=0, ge=0, description="Results to skip (pagination)"),
 ):
     """
-    Query drivers with optional location-based provider filtering.
+    Query drivers with optional location-based provider filtering and capacity filtering.
     
     **Authorization**: Public (no authentication required).
     
@@ -265,6 +286,7 @@ def query_drivers(
       - Uses bounding box around (lat, lon) with radius_km to find nearby providers
       - Returns drivers from those nearby providers
     - `radius_km`: Controls the search radius when lat/lon are provided (default 5km)
+    - `min_capacity`: Filter drivers who have at least one cab with capacity >= min_capacity
     
     **Response**: `{ data: List[DriverPublic], count: int }`
     """
@@ -277,6 +299,7 @@ def query_drivers(
         session=session,
         provider_id=str(provider_id) if provider_id else None,
         provider_ids=provider_ids,
+        min_capacity=min_capacity,
         limit=limit,
         offset=offset,
     )

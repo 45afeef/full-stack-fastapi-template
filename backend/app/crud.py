@@ -427,17 +427,29 @@ def list_cabs_query(
     provider_id: str | None = None,
     provider_ids: list[str] | None = None,
     vehicle_type: str | None = None,
+    min_capacity: int | None = None,
+    max_capacity: int | None = None,
+    min_minimum_rate: int | None = None,
+    max_minimum_rate: int | None = None,
+    min_per_km_rate: int | None = None,
+    max_per_km_rate: int | None = None,
+    min_km_for_minimum_rate: int | None = None,
+    max_km_for_minimum_rate: int | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[List[Cab], int]:
     """
-    Flexible cab listing used by query endpoints. Supports single provider, multiple providers, or vehicle type filtering.
+    Flexible cab listing used by query endpoints. Supports single provider, multiple providers, vehicle type, and rate/capacity filtering.
     
     **Filters** (all optional, combined with AND logic):
     - `provider_id`: Single provider. If specified, only cabs from this provider are returned.
     - `provider_ids`: List of provider IDs. If specified, cabs from any of these providers are included.
       - Note: If both provider_id and provider_ids are specified, provider_id takes precedence.
     - `vehicle_type`: Filter cabs by vehicle type (e.g., SEDAN, SUV, HATCHBACK).
+    - `min_capacity` / `max_capacity`: Filter by passenger capacity (inclusive bounds).
+    - `min_minimum_rate` / `max_minimum_rate`: Filter by minimum rate (inclusive bounds).
+    - `min_per_km_rate` / `max_per_km_rate`: Filter by per km rate (inclusive bounds).
+    - `min_km_for_minimum_rate` / `max_km_for_minimum_rate`: Filter by km for minimum rate (inclusive bounds).
     
     **Pagination**: 
     - Results are offset by `offset` items
@@ -459,6 +471,30 @@ def list_cabs_query(
     # Filter by vehicle type
     if vehicle_type:
         statement = statement.where(Cab.vehicle_type == vehicle_type)
+    
+    # Filter by capacity
+    if min_capacity is not None:
+        statement = statement.where(Cab.capacity >= min_capacity)
+    if max_capacity is not None:
+        statement = statement.where(Cab.capacity <= max_capacity)
+    
+    # Filter by minimum rate
+    if min_minimum_rate is not None:
+        statement = statement.where(Cab.minimum_rate >= min_minimum_rate)
+    if max_minimum_rate is not None:
+        statement = statement.where(Cab.minimum_rate <= max_minimum_rate)
+    
+    # Filter by per km rate
+    if min_per_km_rate is not None:
+        statement = statement.where(Cab.per_km_rate >= min_per_km_rate)
+    if max_per_km_rate is not None:
+        statement = statement.where(Cab.per_km_rate <= max_per_km_rate)
+    
+    # Filter by km for minimum rate
+    if min_km_for_minimum_rate is not None:
+        statement = statement.where(Cab.km_for_minimum_rate >= min_km_for_minimum_rate)
+    if max_km_for_minimum_rate is not None:
+        statement = statement.where(Cab.km_for_minimum_rate <= max_km_for_minimum_rate)
     
     # Execute with pagination
     results = session.exec(statement.offset(offset).limit(limit)).all()
@@ -488,16 +524,18 @@ def list_drivers_query(
     session: Session,
     provider_id: str | None = None,
     provider_ids: list[str] | None = None,
+    min_capacity: int | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[List[Driver], int]:
     """
-    Flexible driver listing used by query endpoints. Supports single provider or multiple provider filtering.
+    Flexible driver listing used by query endpoints. Supports single provider or multiple provider filtering, and capacity filtering based on associated cabs.
     
     **Filters** (all optional, combined with AND logic):
     - `provider_id`: Single provider. If specified, only drivers from this provider are returned.
     - `provider_ids`: List of provider IDs. If specified, drivers from any of these providers are included.
       - Note: If both provider_id and provider_ids are specified, provider_id takes precedence.
+    - `min_capacity`: Filter drivers who have at least one cab with capacity >= min_capacity.
     
     **Pagination**: 
     - Results are offset by `offset` items
@@ -515,6 +553,12 @@ def list_drivers_query(
     # Filter by multiple provider IDs if specified
     if provider_ids:
         statement = statement.where(Driver.provider_id.in_(provider_ids))
+    
+    # Filter by minimum capacity of associated cabs
+    if min_capacity is not None:
+        # Subquery to find drivers who have cabs with sufficient capacity
+        cab_subquery = select(Cab.id).where(Cab.provider_id == Driver.provider_id, Cab.capacity >= min_capacity)
+        statement = statement.where(cab_subquery.exists())
     
     # Execute with pagination
     results = session.exec(statement.offset(offset).limit(limit)).all()
