@@ -20,7 +20,7 @@ Authorization:
 import uuid
 from typing import Any, List
 
-from app.schemas.provider import ProviderPublic, PublicStayProviderList, StayProviderPublic
+from app.schemas.provider import PublicStayProviderList, StayProviderPublic
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import CurrentUser, SessionDep
@@ -28,9 +28,7 @@ from app import crud
 from app.schemas.provider.stays import (
     UnitsList,
 )
-from app.schemas.provider.cab import CabPublic, DriverPublic
-from app.schemas.provider.cab import CabPublic as CabSchema
-from app.schemas.provider.stays import StayUnitPublic
+from app.schemas.provider.cab import CabsList, DriversList
 from app.api.routes.agency import is_agency_staff
 from app.models.travel.enums import VehicleType
 
@@ -198,7 +196,7 @@ def list_stay_units(
 
 
 
-@router.get("/cabs", response_model=dict)
+@router.get("/cabs", response_model=CabsList)
 def query_cabs(
     *,
     session: SessionDep,
@@ -245,7 +243,7 @@ def query_cabs(
     return {"data": results, "count": count}
 
 
-@router.get("/drivers", response_model=dict)
+@router.get("/drivers", response_model=DriversList)
 def query_drivers(
     *,
     session: SessionDep,
