@@ -7,6 +7,7 @@ from app import crud
 from app.models import UserCreate, User
 from sqlmodel import select
 from app.models.travel.enums import AmenityScope, ServiceProviderType
+from app.models.travel.providers import StayServiceProvider
 from app.core.config import settings
 from tests.utils.utils import random_phone, random_lower_string, random_email
 from tests.utils.user import authentication_token_from_phone
@@ -67,7 +68,17 @@ def create_provider_and_driver(client: TestClient, superuser_headers: dict[str, 
     return provider
 
 
-def create_stay_provider_with_unit(client: TestClient, superuser_headers: dict[str, str], db: Session, owner_user, lat=12.0, lon=77.0, room_rate=100, amenity=None):
+def create_stay_provider_with_unit(
+        client: TestClient, 
+        superuser_headers: dict[str, str], 
+        db: Session, 
+        owner_user, 
+        lat=12.0, 
+        lon=77.0, 
+        room_rate=100, 
+        amenity=None, 
+        room_count=1
+    ):
     # create a Location directly in DB and then a provider referencing it
     from app.models.travel.location import Location
     loc = Location(id=uuid.uuid4(), latitude=float(lat), longitude=float(lon))
@@ -81,6 +92,7 @@ def create_stay_provider_with_unit(client: TestClient, superuser_headers: dict[s
         "owner_id": str(owner_user.id),
         "created_by": str(owner_user.id),
         "location_id": str(loc.id),
+        "room_count": room_count,
     }
     r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_headers, json=provider_data)
     assert r.status_code == 201
@@ -202,7 +214,12 @@ class TestQueryEndpoints:
         assert r.json()["count"] == 0
 
 
-    def test_query_units_multi_amenities_filter(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
+    def test_query_units_multi_amenities_filter(
+        self, 
+        client: TestClient, 
+        superuser_token_headers: dict[str, str], 
+        db: Session
+    ):
         """
         Test multi-amenity filtering with two distant units having different amenities.
         
@@ -365,6 +382,52 @@ class TestQueryEndpoints:
         )
         assert r.status_code == 200
         assert r.json()["count"] == 1, "No amenity filter returns Unit 2"
+
+        # Test Case 8: room_count filter
+        # Create a third provider with room_count=2
+        provider3, unit3, _ = create_stay_provider_with_unit(
+            client,
+            superuser_token_headers,
+            db,
+            owner,
+            lat=30.0,
+            lon=30.0,
+            room_rate=150,
+            amenity="wifi",
+            room_count=2,
+        )
+
+        # room_count=2 should return only units belonging to providers with at least 2 rooms
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?room_count=2",
+            headers=superuser_token_headers,
+        )
+        assert r.status_code == 200
+        response = r.json()
+        provider_ids = {unit["provider_id"] for unit in response["data"]}
+        assert provider3["id"] in provider_ids, "Provider 3 must be returned for room_count=2"
+        assert provider1_id not in provider_ids, "Provider 1 with room_count=1 must not be returned for room_count=2"
+        assert provider2_id not in provider_ids, "Provider 2 with room_count=1 must not be returned for room_count=2"
+        for unit in response["data"]:
+            provider = db.get(StayServiceProvider, unit["provider_id"])
+            assert provider is not None
+            assert provider.room_count >= 2, f"Returned unit {unit['id']} must belong to a provider with room_count >= 2"
+
+        # room_count=1 should return units for all three created providers
+        r = client.get(
+            f"{settings.API_V1_STR}/query/units?room_count=1",
+            headers=superuser_token_headers,
+        )
+        assert r.status_code == 200
+        response = r.json()
+        provider_ids = {unit["provider_id"] for unit in response["data"]}
+        assert provider1_id in provider_ids, "Provider 1 must be returned for room_count=1"
+        assert provider2_id in provider_ids, "Provider 2 must be returned for room_count=1"
+        assert provider3["id"] in provider_ids, "Provider 3 must be returned for room_count=1"
+        for unit in response["data"]:
+            provider = db.get(StayServiceProvider, unit["provider_id"])
+            assert provider is not None
+            assert provider.room_count >= 1, f"Returned unit {unit['id']} must belong to a provider with room_count >= 1"
 
 
     def test_sql_injection_like_input_is_handled(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
@@ -1466,6 +1529,42 @@ class TestQueryEndpoints:
         assert prov2_id not in provider_ids, "Provider 2 cannot accommodate pax_count 7"
         assert prov3_id not in provider_ids, "Provider 3 cannot accommodate pax_count 7"
 
+    def test_query_stay_providers_by_room_count(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
+        """
+        Test filtering stay providers by minimum room count.
+        """
+        phone_number = random_phone()
+        password = random_lower_string()
+        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
+
+        # Provider 1: 2 rooms
+        prov1, unit1, loc_a = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=50.0, lon=50.0, room_rate=100, amenity="wifi", room_count=2
+        )
+        prov1_id = prov1["id"]
+
+        # Provider 2: 3 rooms
+        prov2, unit2, loc_b = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=51.0, lon=51.0, room_rate=150, amenity="pool", room_count=3
+        )
+        prov2_id = prov2["id"]
+
+        # Provider 3: 4 rooms
+        prov3, unit3, loc_c = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=52.0, lon=52.0, room_rate=200, amenity="wifi", room_count=4
+        )
+        prov3_id = prov3["id"]
+
+        # Test Case 1: room_count=2 (should get Providers 1, 2, and 3)
+        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?room_count=2", headers=superuser_token_headers)
+        assert r.status_code == 200
+        provider_ids = [p["id"] for p in r.json()["data"]]
+        assert prov1_id in provider_ids, "Provider 1 has at least 2 rooms"
+        assert prov2_id in provider_ids, "Provider 2 has at least 2 rooms"
+        assert prov3_id in provider_ids, "Provider 3 has at least 2 rooms"
 
     def test_query_stay_providers_combined_filters(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         """

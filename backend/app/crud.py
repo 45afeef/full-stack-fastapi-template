@@ -189,6 +189,7 @@ def list_stay_providers(
     location_id: str | None = None,
     min_price: int | None = None,
     max_price: int | None = None,
+    room_count: int | None = None,
     pax_count: int | None = None,
     amenities: List[str] | None = None,
     min_rating: float | None = None,
@@ -225,6 +226,10 @@ def list_stay_providers(
     # Filter by stay-provider level occupancy if specified
     if pax_count:
         statement = statement.where(StayServiceProvider.max_occupancy >= pax_count)
+
+    # Filter by stay-provider level room count if specified
+    if room_count:
+        statement = statement.where(StayServiceProvider.room_count >= room_count)
 
     # Check if we have any unit-based filters (price, pax, amenities)
     has_unit_filters = min_price is not None or max_price is not None or amenities
@@ -274,6 +279,7 @@ def list_stay_units(
     max_price: int | None = None,
     pax_count: int | None = None,
     amenities: List[str] | None = None,
+    room_count: int | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[List[StayUnit], int]:
@@ -290,6 +296,7 @@ def list_stay_units(
     - `amenities`: AND semantics. Unit must have ALL listed amenities.
       - Uses subquery: select unit IDs with amenities, group by unit, count distinct amenities, 
       - then filter to units where count(distinct amenities) >= len(amenities_list)
+    - `room_count`: Filter by provider's room_count (minimum number of rooms)
     
     **Pagination**: 
     - Results offset by `offset` items
@@ -347,6 +354,10 @@ def list_stay_units(
         
         # Join units to the subquery
         statement = statement.where(StayUnit.id.in_(subq))
+
+    # Filter by provider's room_count
+    if room_count:
+        statement = statement.join(StayServiceProvider, StayUnit.provider_id == StayServiceProvider.provider_id).where(StayServiceProvider.room_count >= room_count)
 
     # Compute total count (approximate: only counts what's returned on this page)
     # TODO: For accurate total count across pagination, consider SELECT COUNT(*) before offset/limit

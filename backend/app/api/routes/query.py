@@ -45,6 +45,7 @@ def list_stay_providers(
     min_price: int = Query(default=None, ge=0, description="Minimum room rate to filter units"),
     max_price: int = Query(default=None, ge=0, description="Maximum room rate to filter units"),
     pax_count: int = Query(default=None, ge=1, description="Minimum occupancy required: filters providers with units that can accommodate pax_count guests"),
+    room_count: int = Query(default=None, ge=1, description="Minimum number of rooms required: filters providers with at least this many rooms"),
     amenities: List[str] = Query(default=None, description="List of required amenities (AND semantics: provider units must have ALL listed amenities)"),
     min_rating: float = Query(default=None, ge=0.0, le=5.0, description="Minimum average rating filter (reserved for future use)"),
     limit: int = Query(default=100, ge=1, le=500, description="Max results per page"),
@@ -102,6 +103,7 @@ def list_stay_providers(
         min_price=min_price,
         max_price=max_price,
         pax_count=pax_count,
+        room_count=room_count,
         amenities=amenities,
         min_rating=min_rating,
         limit=limit,
@@ -141,6 +143,7 @@ def list_stay_units(
     max_price: int = Query(default=None, description="Maximum room rate filter"),
     pax_count: int = Query(default=None, ge=1, description="Minimum occupancy required: filters units with max_occupancy >= pax_count OR total provider capacity >= pax_count"),
     amenities: List[str] = Query(default=None, description="List of required amenities (AND semantics: unit must have ALL listed amenities)"),
+    room_count: int = Query(default=None, ge=1, description="Minimum number of rooms required: filters units from providers with at least this many rooms"),
     limit: int = Query(default=100, ge=1, le=500, description="Max number of results per page"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip (for pagination)"),
 ) -> Any:
@@ -160,6 +163,7 @@ def list_stay_units(
         - `?amenities=wifi&amenities=ac` → units with both wifi AND ac
         - `?amenities=wifi,pool` → units with both wifi AND pool (auto-parsed)
       - Handles duplicates and whitespace gracefully
+    - `room_count`: Filters units from providers with at least this many rooms
     
     **Pagination**: Use `limit` and `offset` together for cursor-based pagination.
     
@@ -189,6 +193,7 @@ def list_stay_units(
         max_price=max_price,
         pax_count=pax_count,
         amenities=amenities,
+        room_count=room_count,
         limit=limit,
         offset=offset,
     )
