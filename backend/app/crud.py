@@ -15,6 +15,8 @@ from app.models.travel.providers import (
 )
 from app.models.travel.stay import StayUnit, StayAmenity
 from app.models.travel.providers import TravelAgency, TravelAgencyStaff
+from app.models.user.profile import Profile
+from app.schemas.provider.cab import DriverPublic
 from sqlalchemy import func
 
 
@@ -538,7 +540,7 @@ def list_drivers_query(
     min_capacity: int | None = None,
     limit: int = 100,
     offset: int = 0,
-) -> tuple[List[Driver], int]:
+) -> tuple[list[DriverPublic], int]:
     """
     Flexible driver listing used by query endpoints. Supports single provider or multiple provider filtering, and capacity filtering based on associated cabs.
     
@@ -552,10 +554,10 @@ def list_drivers_query(
     - Results are offset by `offset` items
     - Limited to `limit` items per page
     
-    **Return**: Tuple of (results: List[Driver], count: int)
+    **Return**: Tuple of (results: List[DriverPublic], count: int)
     - count = len(results) (approximate, only this page)
     """
-    statement = select(Driver)
+    statement = select(Driver, Profile).join(Profile, Profile.id == Driver.profile_id, isouter=True)
     
     # Filter by single provider if specified
     if provider_id:
@@ -572,9 +574,41 @@ def list_drivers_query(
         statement = statement.where(cab_subquery.exists())
     
     # Execute with pagination
-    results = session.exec(statement.offset(offset).limit(limit)).all()
-    
-    return results, len(results)
+    raw_results = session.exec(statement.offset(offset).limit(limit)).all()
+    drivers: list[DriverPublic] = []
+    for driver, profile in raw_results:
+        full_name = None
+        if profile:
+            name_parts = [profile.first_name, profile.middle_name, profile.last_name]
+            full_name = " ".join([part for part in name_parts if part]).strip() or None
+
+        drivers.append(
+            DriverPublic(
+                id=driver.id,
+                provider_id=driver.provider_id,
+                profile_id=driver.profile_id,
+                user_id=driver.user_id,
+                first_name=profile.first_name if profile else None,
+                middle_name=profile.middle_name if profile else None,
+                last_name=profile.last_name if profile else None,
+                full_name=full_name,
+                primary_phone_number=profile.primary_phone_number if profile else None,
+                secondary_phone_number=profile.secondary_phone_number if profile else None,
+                primary_email=profile.primary_email if profile else None,
+                secondary_email=profile.secondary_email if profile else None,
+                profile_picture=profile.profile_picture if profile else None,
+                bio=profile.bio if profile else None,
+                address=profile.address if profile else None,
+                city=profile.city if profile else None,
+                state=profile.state if profile else None,
+                zip_code=profile.zip_code if profile else None,
+                country=profile.country if profile else None,
+                created_at=driver.created_at,
+                updated_at=driver.updated_at,
+            )
+        )
+
+    return drivers, len(drivers)
 
 
 def _providers_within_bbox(session: Session, lat: float, lon: float, radius_km: float) -> list[str]:

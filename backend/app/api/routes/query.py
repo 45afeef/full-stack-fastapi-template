@@ -294,6 +294,7 @@ def query_drivers(
     - `min_capacity`: Filter drivers who have at least one cab with capacity >= min_capacity
     
     **Response**: `{ data: List[DriverPublic], count: int }`
+    - Each driver object includes flattened profile/contact fields such as full_name, primary_phone_number, primary_email, and other profile details.
     """
     provider_ids = None
     if lat is not None and lon is not None:

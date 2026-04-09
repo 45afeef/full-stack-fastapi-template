@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 from sqlmodel import SQLModel
@@ -41,7 +42,27 @@ class DriverPublic(SQLModel):
     user_id: Optional[UUID] = None
     provider_id: UUID
     profile_id: UUID
-    id: Optional[UUID]
+    id: Optional[UUID] = None
+
+    # driver contact/profile details included in query responses so clients
+    # can avoid extra nested calls for profile/user lookups.
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
+    full_name: Optional[str] = None
+    primary_phone_number: Optional[str] = None
+    secondary_phone_number: Optional[str] = None
+    primary_email: Optional[str] = None
+    secondary_email: Optional[str] = None
+    profile_picture: Optional[str] = None
+    bio: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    country: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 __all__ = ["CabCreate", "CabPublic", "DriverCreate", "DriverPublic"]

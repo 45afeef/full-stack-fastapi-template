@@ -57,7 +57,7 @@ def create_provider_and_driver(client: TestClient, superuser_headers: dict[str, 
 
     # create profile then driver
     # user_id is optional on the profile now; leave it out to exercise nullable behaviour
-    profile_data = {"full_name": "Driver Test", "primary_email": random_email(), "primary_phone_number": random_phone()}
+    profile_data = {"first_name": "Driver Test", "primary_email": random_email(), "primary_phone_number": random_phone()}
     r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_headers, json=profile_data)
     assert r.status_code == 200
     profile = r.json()
@@ -65,7 +65,7 @@ def create_provider_and_driver(client: TestClient, superuser_headers: dict[str, 
     driver_data = {"user_id": str(owner_user.id), "profile_id": str(profile['id'])}
     r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers", headers=superuser_headers, json=driver_data)
     assert r.status_code == 200
-    return provider
+    return provider, profile
 
 
 def create_stay_provider_with_unit(
@@ -152,13 +152,61 @@ class TestQueryEndpoints:
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        provider = create_provider_and_driver(client, superuser_token_headers, owner, db)
+        provider, profile = create_provider_and_driver(client, superuser_token_headers, owner, db)
         provider_id = provider["id"]
 
         r = client.get(f"{settings.API_V1_STR}/query/drivers?provider_id={provider_id}")
         assert r.status_code == 200
         body = r.json()
-        assert "data" in body and "count" in body
+        assert body["count"] == 1
+        assert isinstance(body["data"], list)
+        assert len(body["data"]) == 1
+
+        driver_item = body["data"][0]
+        expected_fields = {
+            "id",
+            "provider_id",
+            "profile_id",
+            "user_id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "full_name",
+            "primary_phone_number",
+            "secondary_phone_number",
+            "primary_email",
+            "secondary_email",
+            "profile_picture",
+            "bio",
+            "address",
+            "city",
+            "state",
+            "zip_code",
+            "country",
+            "created_at",
+            "updated_at",
+        }
+        assert set(driver_item.keys()) == expected_fields
+        assert driver_item["provider_id"] == provider_id
+        assert driver_item["profile_id"] == profile["id"]
+        assert driver_item["user_id"] == str(owner.id)
+        assert driver_item["first_name"] == "Driver Test"
+        assert driver_item["middle_name"] is None
+        assert driver_item["last_name"] is None
+        assert driver_item["full_name"] in ("Driver Test", None)
+        assert driver_item["primary_phone_number"] == profile["primary_phone_number"]
+        assert driver_item["secondary_phone_number"] is None
+        assert driver_item["primary_email"] == profile["primary_email"]
+        assert driver_item["secondary_email"] is None
+        assert driver_item["profile_picture"] is None
+        assert driver_item["bio"] is None
+        assert driver_item["address"] is None
+        assert driver_item["city"] is None
+        assert driver_item["state"] is None
+        assert driver_item["zip_code"] is None
+        assert driver_item["country"] is None
+        assert driver_item["created_at"] is not None
+        assert driver_item["updated_at"] is not None
 
         # invalid coords param
         r = client.get(f"{settings.API_V1_STR}/query/drivers?lat=abc&lon=def")
@@ -1004,7 +1052,7 @@ class TestQueryEndpoints:
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        provider = create_provider_and_driver(client, superuser_token_headers, owner, db)
+        provider, _ = create_provider_and_driver(client, superuser_token_headers, owner, db)
         provider_id = provider["id"]
 
         # Unauthenticated request should still work (public endpoint)
@@ -1989,6 +2037,7 @@ class TestQueryEndpoints:
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
+        expected_drivers = []
 
         # Create location for providers
         from app.models.travel.location import Location
@@ -2018,7 +2067,7 @@ class TestQueryEndpoints:
             provider_id = r.json()["id"]
 
             # Create profile for driver
-            profile_data = {"full_name": config["driver_name"], "primary_email": random_email(), "primary_phone_number": random_phone()}
+            profile_data = {"first_name": config["driver_name"], "primary_email": random_email(), "primary_phone_number": random_phone()}
             r = client.post(f"{settings.API_V1_STR}/profile/", headers=superuser_token_headers, json=profile_data)
             assert r.status_code == 200
             profile = r.json()
@@ -2027,6 +2076,11 @@ class TestQueryEndpoints:
             driver_data = {"user_id": str(owner.id), "profile_id": str(profile['id'])}
             r = client.post(f"{settings.API_V1_STR}/providers/{provider_id}/cab/drivers", headers=superuser_token_headers, json=driver_data)
             assert r.status_code == 200
+            expected_drivers.append({
+                "first_name": profile["first_name"],
+                "primary_phone_number": profile["primary_phone_number"],
+                "primary_email": profile["primary_email"],
+            })
 
             # Create cab for this provider
             cab_data = {
@@ -2047,22 +2101,31 @@ class TestQueryEndpoints:
         r = client.get(f"{settings.API_V1_STR}/query/drivers?min_capacity=5")
         assert r.status_code == 200
         data = r.json()
-        assert data["count"] >= 1, "Should find at least Driver B"
-        # Verify that returned drivers have associated cabs with capacity >= 5
-        # Note: This is a basic check; in a real scenario we'd need to verify the association
+        assert data["count"] == 1
+        assert data["data"][0]["full_name"] == "Driver B"
+        assert data["data"][0]["primary_phone_number"] == expected_drivers[1]["primary_phone_number"]
+        assert data["data"][0]["primary_email"] == expected_drivers[1]["primary_email"]
 
         # Test Case 2: min_capacity=3 (should return Driver A and Driver B)
         r = client.get(f"{settings.API_V1_STR}/query/drivers?min_capacity=3")
         assert r.status_code == 200
         data = r.json()
-        assert data["count"] >= 2, "Should find Driver A and Driver B"
+        assert data["count"] >= 2, "Should find at least Driver A and Driver B"
+        returned_names = {driver["full_name"] for driver in data["data"]}
+        for driver in ["Driver A", "Driver B"]:
+            assert driver in returned_names, f"{driver} should be in results for min_capacity=3"
+        returned_data = {driver["full_name"]: driver for driver in data["data"]}
+        assert returned_data["Driver A"]["primary_phone_number"] == expected_drivers[0]["primary_phone_number"]
+        assert returned_data["Driver A"]["primary_email"] == expected_drivers[0]["primary_email"]
+        assert returned_data["Driver B"]["primary_phone_number"] == expected_drivers[1]["primary_phone_number"]
+        assert returned_data["Driver B"]["primary_email"] == expected_drivers[1]["primary_email"]
 
         # Test Case 3: min_capacity=7 (should return no drivers)
         r = client.get(f"{settings.API_V1_STR}/query/drivers?min_capacity=7")
         assert r.status_code == 200
         data = r.json()
-        # May return 0 or more depending on implementation, but should be fewer than previous queries
-        assert data["count"] >= 0, "Should return valid count"
+        assert data["count"] == 0
+        assert data["data"] == []
 
 
     def test_query_cabs_input_validation(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
