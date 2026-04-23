@@ -16,12 +16,11 @@ Authorization:
 - /query/cabs: public (no auth required)
 - /query/drivers: public (no auth required)
 - /query/stay-units-near: superuser or agency staff only
-- /query/stay-providers-near-location: superuser or agency staff only (new)
-- /query/cabs-near-location: public (new)
 
 Location Resolution:
-- All endpoints support human-readable place names (e.g., "Bangalore")
-- Automatic resolution via OpenStreetMap Nominatim API
+- Geographic endpoints support both lat/lon coordinates AND place names
+- Provide either `location` (place name) OR `lat`/`lon` (coordinates)
+- Automatic resolution via OpenStreetMap Nominatim API when location name provided
 - Results cached in LocationLookup table for performance
 - In-memory cache with 24-hour TTL
 """
@@ -212,14 +211,15 @@ def list_stay_units(
 
 
 @router.get("/cabs", response_model=CabsList)
-def query_cabs(
+async def query_cabs(
     *,
     session: SessionDep,
     provider_id: uuid.UUID = Query(default=None, description="Filter by specific cab provider"),
     vehicle_type: VehicleType = Query(default=None, description="Filter by vehicle type (e.g., SEDAN, SUV, HATCHBACK)"),
-    lat: float = Query(default=None, description="Latitude: if provided with lon, filters cabs by provider location"),
-    lon: float = Query(default=None, description="Longitude: if provided with lat, filters cabs by provider location"),
-    radius_km: float = Query(default=5.0, ge=0.1, description="Search radius in kilometers (used with lat/lon)"),
+    location: str = Query(default=None, description="Place name to search near (e.g., 'Bangalore', 'New York'). If provided, lat/lon are ignored."),
+    lat: float = Query(default=None, description="Latitude: if provided with lon (and location not set), filters cabs by provider location"),
+    lon: float = Query(default=None, description="Longitude: if provided with lat (and location not set), filters cabs by provider location"),
+    radius_km: float = Query(default=5.0, ge=0.1, description="Search radius in kilometers (used with location/lat/lon)"),
     min_capacity: int = Query(default=None, ge=1, description="Minimum passenger capacity filter"),
     max_capacity: int = Query(default=None, ge=1, description="Maximum passenger capacity filter"),
     min_minimum_rate: int = Query(default=None, ge=0, description="Minimum minimum rate filter"),
@@ -236,13 +236,16 @@ def query_cabs(
     
     **Authorization**: Public (no authentication required).
     
-    **Filtering Logic**:
+    **Location-Based Search**:
+    - `location`: Place name (e.g., "Bangalore", "New York"). If provided, lat/lon are ignored.
+      - Automatically resolved to coordinates via geocoding
+      - Cached for performance
+    - `lat` + `lon`: Direct coordinates. Used if `location` not provided.
+    - `radius_km`: Search radius in kilometers (default 5km)
+    
+    **Filtering Logic** (all optional):
     - `provider_id`: Filter to a specific provider's cabs
     - `vehicle_type`: Filter by vehicle type string (e.g., SEDAN, SUV, HATCHBACK, etc.)
-    - `lat` + `lon`: Geographic search. If both provided:
-      - Uses bounding box around (lat, lon) with radius_km to find nearby providers
-      - Returns cabs from those nearby providers (not a haversine distance to individual cabs)
-    - `radius_km`: Controls the search radius when lat/lon are provided (default 5km)
     - `min_capacity` / `max_capacity`: Filter by passenger capacity (inclusive bounds)
     - `min_minimum_rate` / `max_minimum_rate`: Filter by minimum rate (inclusive bounds)
     - `min_per_km_rate` / `max_per_km_rate`: Filter by per km rate (inclusive bounds)
@@ -254,6 +257,16 @@ def query_cabs(
     
     **Response**: `{ data: List[CabPublic], count: int }`
     """
+    # Resolve location to coordinates if provided
+    if location:
+        coords = await resolve_location(location, session)
+        if not coords:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not resolve location '{location}'. Please try a different place name.",
+            )
+        lat, lon = coords
+    
     provider_ids = None
     if lat is not None and lon is not None:
         # Get provider IDs within the bounding box around the coordinates
@@ -279,13 +292,14 @@ def query_cabs(
 
 
 @router.get("/drivers", response_model=DriversList)
-def query_drivers(
+async def query_drivers(
     *,
     session: SessionDep,
     provider_id: uuid.UUID = Query(default=None, description="Filter by specific driver provider"),
-    lat: float = Query(default=None, description="Latitude: if provided with lon, filters drivers by provider location"),
-    lon: float = Query(default=None, description="Longitude: if provided with lat, filters drivers by provider location"),
-    radius_km: float = Query(default=5.0, ge=0.1, description="Search radius in kilometers (used with lat/lon)"),
+    location: str = Query(default=None, description="Place name to search near (e.g., 'Bangalore', 'New York'). If provided, lat/lon are ignored."),
+    lat: float = Query(default=None, description="Latitude: if provided with lon (and location not set), filters drivers by provider location"),
+    lon: float = Query(default=None, description="Longitude: if provided with lat (and location not set), filters drivers by provider location"),
+    radius_km: float = Query(default=5.0, ge=0.1, description="Search radius in kilometers (used with location/lat/lon)"),
     min_capacity: int = Query(default=None, ge=1, description="Minimum capacity of associated cabs filter"),
     limit: int = Query(default=100, ge=1, le=500, description="Max results per page"),
     offset: int = Query(default=0, ge=0, description="Results to skip (pagination)"),
@@ -295,17 +309,30 @@ def query_drivers(
     
     **Authorization**: Public (no authentication required).
     
+    **Location-Based Search**:
+    - `location`: Place name (e.g., "Bangalore", "New York"). If provided, lat/lon are ignored.
+      - Automatically resolved to coordinates
+      - Cached for performance
+    - `lat` + `lon`: Direct coordinates. Used if `location` not provided.
+    - `radius_km`: Search radius in kilometers (default 5km)
+    
     **Filtering Logic**:
     - `provider_id`: Filter to a specific provider's drivers
-    - `lat` + `lon`: Geographic search. If both provided:
-      - Uses bounding box around (lat, lon) with radius_km to find nearby providers
-      - Returns drivers from those nearby providers
-    - `radius_km`: Controls the search radius when lat/lon are provided (default 5km)
     - `min_capacity`: Filter drivers who have at least one cab with capacity >= min_capacity
     
     **Response**: `{ data: List[DriverPublic], count: int }`
     - Each driver object includes flattened profile/contact fields such as full_name, primary_phone_number, primary_email, and other profile details.
     """
+    # Resolve location to coordinates if provided
+    if location:
+        coords = await resolve_location(location, session)
+        if not coords:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not resolve location '{location}'. Please try a different place name.",
+            )
+        lat, lon = coords
+    
     provider_ids = None
     if lat is not None and lon is not None:
         # Get provider IDs within the bounding box around the coordinates
