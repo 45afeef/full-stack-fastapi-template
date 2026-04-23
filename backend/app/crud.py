@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.core.security import get_password_hash, verify_password
 from app.models import User, UserCreate, UserUpdate
 from app.models.travel.cab import Cab, Driver
+from app.models.travel.location import Location, LocationLookup
 from app.models.travel.providers import (
     CabServiceProvider,
     ServiceProvider,
@@ -803,4 +804,288 @@ def list_stay_units_by_location(
     total_count = len(sorted_units)  # Total matching units
     
     return paged, total_count
+
+
+# ============================================================================
+# Location-Based Search Support (New)
+# ============================================================================
+
+def get_location_lookup(*, session: Session, normalized_name: str) -> LocationLookup | None:
+    """
+    Fetch a LocationLookup entry by normalized name.
+
+    Args:
+        session: Database session
+        normalized_name: Lowercase, stripped place name
+
+    Returns:
+        LocationLookup model instance if found, None otherwise
+    """
+    stmt = select(LocationLookup).where(LocationLookup.name == normalized_name)
+    return session.exec(stmt).first()
+
+
+def create_location_lookup(
+    *, session: Session, name: str, latitude: float, longitude: float
+) -> LocationLookup:
+    """
+    Create a new LocationLookup entry.
+
+    Args:
+        session: Database session
+        name: Normalized (lowercase) place name
+        latitude: Geographic latitude
+        longitude: Geographic longitude
+
+    Returns:
+        Created LocationLookup instance
+
+    Raises:
+        Exception: If name already exists (unique constraint) or DB error
+    """
+    lookup = LocationLookup(name=name, latitude=latitude, longitude=longitude, search_count=1)
+    session.add(lookup)
+    session.commit()
+    session.refresh(lookup)
+    return lookup
+
+
+def list_stay_providers_by_location(
+    *,
+    session: Session,
+    lat: float,
+    lon: float,
+    radius_km: float = 10.0,
+    min_price: int | None = None,
+    max_price: int | None = None,
+    pax_count: int | None = None,
+    room_count: int | None = None,
+    amenities: List[str] | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    sort_by_distance: bool = False,
+) -> tuple[list, int]:
+    """
+    Find stay providers near a geographic point with optional filters and distance sorting.
+
+    **Algorithm Overview**:
+    1. Use bounding box pre-filter to find providers within radius_km (fast)
+    2. Apply optional filters (price, amenities, capacity, etc.)
+    3. Optionally sort by haversine distance (nearest first)
+    4. Apply pagination
+
+    **Filters** (all optional, combined with AND logic):
+    - `min_price` / `max_price`: Filter providers by unit room_rate
+    - `pax_count`: Filter providers with units accommodating pax_count guests
+    - `room_count`: Filter providers with at least this many rooms
+    - `amenities`: AND semantics - provider units must have ALL listed amenities
+
+    **Distance Sorting**:
+    - If `sort_by_distance=True`: Results sorted by distance to provider location (nearest first)
+    - If False: Results in database order
+
+    **Pagination**: Applied AFTER sorting
+
+    **Return**: Tuple of (StayServiceProvider list, total matching count)
+
+    **Performance Note**:
+    - Bounding box is approximate but fast
+    - Full haversine distance computed only if sort_by_distance=True
+    """
+    import math
+
+    # Step 1: Pre-filter providers using bounding box
+    provider_ids = _providers_within_bbox(session=session, lat=lat, lon=lon, radius_km=radius_km)
+
+    if not provider_ids:
+        return [], 0
+
+    # Step 2: Apply filters
+    stmt = select(StayProviderModel).where(StayProviderModel.provider_id.in_(provider_ids))
+
+    # Price filter
+    if min_price is not None or max_price is not None:
+        stmt = (
+            select(StayProviderModel)
+            .join(StayUnit, StayUnit.provider_id == StayProviderModel.provider_id)
+            .where(StayProviderModel.provider_id.in_(provider_ids))
+        )
+        if min_price is not None:
+            stmt = stmt.where(StayUnit.room_rate >= min_price)
+        if max_price is not None:
+            stmt = stmt.where(StayUnit.room_rate <= max_price)
+
+    # Room count filter
+    if room_count is not None:
+        stmt = stmt.where(StayProviderModel.room_count >= room_count)
+
+    # Pax count filter
+    if pax_count is not None:
+        stmt = (
+            select(StayProviderModel)
+            .join(StayUnit, StayUnit.provider_id == StayProviderModel.provider_id)
+            .where(StayProviderModel.provider_id.in_(provider_ids))
+            .where(StayUnit.max_occupancy >= pax_count)
+        )
+
+    # Amenities filter (AND semantics)
+    if amenities:
+        for amenity in amenities:
+            stmt = (
+                select(StayProviderModel)
+                .join(StayUnit, StayUnit.provider_id == StayProviderModel.provider_id)
+                .join(StayAmenity, StayAmenity.stay_unit_id == StayUnit.id)
+                .where(StayProviderModel.provider_id.in_(provider_ids))
+                .where(StayAmenity.amenity == amenity)
+            )
+
+    # Apply distinct to avoid duplicates from joins
+    stmt = select(distinct(StayProviderModel)).select_from(stmt)
+
+    results = session.exec(stmt).all()
+
+    # Step 3: Optionally sort by distance
+    if sort_by_distance and results:
+        stmt_loc = (
+            select(ServiceProvider.id, Location.latitude, Location.longitude)
+            .join(Location, ServiceProvider.location_id == Location.id)
+            .where(ServiceProvider.id.in_(provider_ids))
+        )
+        loc_rows = session.exec(stmt_loc).all()
+
+        provider_loc = {}
+        for row in loc_rows:
+            pid = str(row[0]) if isinstance(row, tuple) else str(row.id)
+            if isinstance(row, tuple):
+                provider_loc[pid] = (float(row[1]), float(row[2]))
+            else:
+                provider_loc[pid] = (float(row.latitude), float(row.longitude))
+
+        def haversine_km(a_lat, a_lon, b_lat, b_lon):
+            R = 6371.0
+            phi1 = math.radians(a_lat)
+            phi2 = math.radians(b_lat)
+            dphi = math.radians(b_lat - a_lat)
+            dlambda = math.radians(b_lon - a_lon)
+            aa = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+            return 2 * 6371.0 * math.asin(math.sqrt(aa))
+
+        providers_with_dist = []
+        for p in results:
+            pid = str(p.provider_id)
+            if pid in provider_loc:
+                plat, plon = provider_loc[pid]
+                d = haversine_km(lat, lon, plat, plon)
+            else:
+                d = float("inf")
+            providers_with_dist.append((p, d))
+
+        providers_with_dist.sort(key=lambda x: x[1])
+        sorted_providers = [p for p, _ in providers_with_dist]
+    else:
+        sorted_providers = results
+
+    # Step 4: Apply pagination
+    paged = sorted_providers[offset : offset + limit]
+    total_count = len(sorted_providers)
+
+    return paged, total_count
+
+
+def list_cabs_by_location(
+    *,
+    session: Session,
+    lat: float,
+    lon: float,
+    radius_km: float = 5.0,
+    vehicle_type: str | None = None,
+    min_capacity: int | None = None,
+    max_capacity: int | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    sort_by_distance: bool = False,
+) -> tuple[list, int]:
+    """
+    Find cabs near a geographic point with optional filters and distance sorting.
+
+    **Algorithm**:
+    1. Find providers within bounding box around (lat, lon)
+    2. Fetch cabs from those providers
+    3. Apply optional filters (vehicle type, capacity)
+    4. Optionally sort by distance to provider location
+    5. Apply pagination
+
+    **Filters** (all optional):
+    - `vehicle_type`: Filter by vehicle type (e.g., "SEDAN", "SUV")
+    - `min_capacity` / `max_capacity`: Filter by passenger capacity (inclusive)
+
+    **Distance Sorting**:
+    - If `sort_by_distance=True`: Results sorted by distance to provider location
+
+    **Return**: Tuple of (Cab list, total count)
+    """
+    import math
+
+    provider_ids = _providers_within_bbox(session=session, lat=lat, lon=lon, radius_km=radius_km)
+
+    if not provider_ids:
+        return [], 0
+
+    stmt = select(Cab).where(Cab.provider_id.in_(provider_ids))
+
+    if vehicle_type:
+        stmt = stmt.where(Cab.vehicle_type == vehicle_type)
+    if min_capacity is not None:
+        stmt = stmt.where(Cab.capacity >= min_capacity)
+    if max_capacity is not None:
+        stmt = stmt.where(Cab.capacity <= max_capacity)
+
+    results = session.exec(stmt).all()
+
+    # Sort by distance if requested
+    if sort_by_distance and results:
+        stmt_loc = (
+            select(ServiceProvider.id, Location.latitude, Location.longitude)
+            .join(Location, ServiceProvider.location_id == Location.id)
+            .where(ServiceProvider.id.in_(provider_ids))
+        )
+        loc_rows = session.exec(stmt_loc).all()
+
+        provider_loc = {}
+        for row in loc_rows:
+            pid = str(row[0]) if isinstance(row, tuple) else str(row.id)
+            if isinstance(row, tuple):
+                provider_loc[pid] = (float(row[1]), float(row[2]))
+            else:
+                provider_loc[pid] = (float(row.latitude), float(row.longitude))
+
+        def haversine_km(a_lat, a_lon, b_lat, b_lon):
+            R = 6371.0
+            phi1 = math.radians(a_lat)
+            phi2 = math.radians(b_lat)
+            dphi = math.radians(b_lat - a_lat)
+            dlambda = math.radians(b_lon - a_lon)
+            aa = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+            return 2 * 6371.0 * math.asin(math.sqrt(aa))
+
+        cabs_with_dist = []
+        for c in results:
+            pid = str(c.provider_id)
+            if pid in provider_loc:
+                plat, plon = provider_loc[pid]
+                d = haversine_km(lat, lon, plat, plon)
+            else:
+                d = float("inf")
+            cabs_with_dist.append((c, d))
+
+        cabs_with_dist.sort(key=lambda x: x[1])
+        sorted_cabs = [c for c, _ in cabs_with_dist]
+    else:
+        sorted_cabs = results
+
+    paged = sorted_cabs[offset : offset + limit]
+    total_count = len(sorted_cabs)
+
+    return paged, total_count
+
 

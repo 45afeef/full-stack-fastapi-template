@@ -6,6 +6,7 @@ These endpoints provide flexible searching capabilities with support for:
 - Price range filtering
 - Passenger capacity filtering (pax_count)
 - Location-based geographic searches (latitude/longitude with radius)
+- Location name resolution (e.g., "Bangalore", "New York") with automatic geocoding
 - Vehicle type filtering for cabs
 - Pagination (limit and offset)
 
@@ -15,6 +16,14 @@ Authorization:
 - /query/cabs: public (no auth required)
 - /query/drivers: public (no auth required)
 - /query/stay-units-near: superuser or agency staff only
+- /query/stay-providers-near-location: superuser or agency staff only (new)
+- /query/cabs-near-location: public (new)
+
+Location Resolution:
+- All endpoints support human-readable place names (e.g., "Bangalore")
+- Automatic resolution via OpenStreetMap Nominatim API
+- Results cached in LocationLookup table for performance
+- In-memory cache with 24-hour TTL
 """
 
 import uuid
@@ -31,6 +40,7 @@ from app.schemas.provider.stays import (
 from app.schemas.provider.cab import CabsList, DriversList
 from app.api.routes.agency import is_agency_staff
 from app.models.travel.enums import VehicleType
+from app.services.geolocation import resolve_location, haversine_distance
 
 router = APIRouter(prefix="/query", tags=["query"])
 
@@ -369,6 +379,192 @@ def query_stay_units_near(
         sort_by_distance=sort_by_distance,
     )
     return UnitsList(data=units, count=count)
+
+
+@router.get("/stay-providers-near-location", response_model=PublicStayProviderList)
+async def query_stay_providers_near_location(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    location: str = Query(..., description="Place name to search near (e.g., 'Bangalore', 'New York'). Will be resolved to coordinates."),
+    radius_km: float = Query(default=10.0, ge=0.1, description="Search radius in kilometers"),
+    min_price: int = Query(default=None, ge=0, description="Minimum room rate filter"),
+    max_price: int = Query(default=None, ge=0, description="Maximum room rate filter"),
+    pax_count: int = Query(default=None, ge=1, description="Minimum occupancy required"),
+    room_count: int = Query(default=None, ge=1, description="Minimum number of rooms required"),
+    amenities: List[str] = Query(default=None, description="List of required amenities (AND semantics)"),
+    sort_by_distance: bool = Query(default=False, description="If True, sort results by distance from location"),
+    limit: int = Query(default=100, ge=1, le=500, description="Max results per page"),
+    offset: int = Query(default=0, ge=0, description="Results to skip (pagination)"),
+) -> dict:
+    """
+    Find stay providers near a place name with optional filters and distance sorting.
+
+    **Authorization**: superuser or agency staff only.
+
+    **Location Resolution**:
+    - Accepts human-readable place names (e.g., "Bangalore", "Times Square", "Kochi")
+    - Automatically resolves to coordinates via OpenStreetMap Nominatim API
+    - Results cached in LocationLookup table for fast repeated lookups
+    - In-memory cache with 24-hour TTL
+
+    **Geographic Search**:
+    - `location`: Required. Place name to search near
+    - `radius_km`: Search radius in kilometers (default 10km)
+    - Uses provider location as the anchor
+    - Returns providers within the specified radius
+
+    **Filtering Logic** (all optional, combined with AND):
+    - `min_price` / `max_price`: Filter providers by unit room_rate
+    - `pax_count`: Filter providers with units accommodating guests
+    - `room_count`: Filter providers with at least this many rooms
+    - `amenities`: AND semantics - units must have ALL listed amenities
+
+    **Sorting**:
+    - If `sort_by_distance=True`: Results sorted by distance from resolved location (nearest first)
+    - If False: Results in database order
+
+    **Pagination**: Use `limit` and `offset` together.
+
+    **Response**: Returns `{ data: List[StayProviderPublic], count: int }`
+
+    **Error Handling**:
+    - If location cannot be resolved: Returns 400 Bad Request
+    - If no providers found: Returns empty list with count=0
+
+    **Example Queries**:
+    ```
+    GET /query/stay-providers-near-location?location=Bangalore&radius_km=15&min_price=100&max_price=500
+    GET /query/stay-providers-near-location?location=Kochi&amenities=wifi&amenities=pool&sort_by_distance=true
+    ```
+    """
+    if not current_user.is_superuser and not is_agency_staff(session, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to query stay providers")
+
+    # Resolve location name to coordinates
+    coords = await resolve_location(location, session)
+    if not coords:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not resolve location '{location}'. Please try a different place name.",
+        )
+
+    lat, lon = coords
+
+    # Normalize amenities
+    if amenities and len(amenities) == 1 and "," in amenities[0]:
+        amenities = amenities[0].split(",")
+    if amenities:
+        normalized = []
+        for amenity in amenities:
+            candidate = amenity.strip()
+            if candidate and candidate not in normalized:
+                normalized.append(candidate)
+        amenities = normalized or None
+
+    # Query providers
+    providers, count = crud.list_stay_providers_by_location(
+        session=session,
+        lat=lat,
+        lon=lon,
+        radius_km=radius_km,
+        min_price=min_price,
+        max_price=max_price,
+        pax_count=pax_count,
+        room_count=room_count,
+        amenities=amenities,
+        limit=limit,
+        offset=offset,
+        sort_by_distance=sort_by_distance,
+    )
+
+    stay_provider_list: list[StayProviderPublic] = []
+    for provider in providers:
+        if not provider.provider:
+            continue
+        stay_provider_list.append(
+            StayProviderPublic(
+                id=provider.provider.id,
+                provider_name=provider.provider.provider_name,
+                provider_type=provider.provider.provider_type,
+                location_id=provider.provider.location_id,
+                property_type=provider.property_type,
+                room_count=provider.room_count,
+                optimal_occupancy=provider.optimal_occupancy,
+                max_occupancy=provider.max_occupancy,
+            )
+        )
+
+    return PublicStayProviderList(data=stay_provider_list, count=count)
+
+
+@router.get("/cabs-near-location", response_model=CabsList)
+async def query_cabs_near_location(
+    *,
+    session: SessionDep,
+    location: str = Query(..., description="Place name to search near (e.g., 'Bangalore', 'New York')"),
+    radius_km: float = Query(default=5.0, ge=0.1, description="Search radius in kilometers"),
+    vehicle_type: VehicleType = Query(default=None, description="Filter by vehicle type"),
+    min_capacity: int = Query(default=None, ge=1, description="Minimum passenger capacity"),
+    max_capacity: int = Query(default=None, ge=1, description="Maximum passenger capacity"),
+    sort_by_distance: bool = Query(default=False, description="If True, sort by distance from location"),
+    limit: int = Query(default=100, ge=1, le=500, description="Max results per page"),
+    offset: int = Query(default=0, ge=0, description="Results to skip (pagination)"),
+):
+    """
+    Find cabs near a place name with optional filters and distance sorting.
+
+    **Authorization**: Public (no authentication required).
+
+    **Location Resolution**:
+    - Accepts human-readable place names (e.g., "Bangalore", "Times Square")
+    - Automatically resolves to coordinates
+    - Cached for performance with 24-hour TTL
+
+    **Geographic Search**:
+    - `location`: Required. Place name to search near
+    - `radius_km`: Search radius in kilometers (default 5km)
+    - Returns cabs from providers within the radius
+
+    **Filtering Logic** (all optional):
+    - `vehicle_type`: Filter by vehicle type (e.g., SEDAN, SUV, HATCHBACK)
+    - `min_capacity` / `max_capacity`: Filter by passenger capacity (inclusive)
+
+    **Sorting**:
+    - If `sort_by_distance=True`: Results sorted by distance (nearest first)
+
+    **Response**: `{ data: List[CabPublic], count: int }`
+
+    **Example**:
+    ```
+    GET /query/cabs-near-location?location=bangalore&radius_km=10&min_capacity=4&sort_by_distance=true
+    ```
+    """
+    # Resolve location name to coordinates
+    coords = await resolve_location(location, session)
+    if not coords:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not resolve location '{location}'. Please try a different place name.",
+        )
+
+    lat, lon = coords
+
+    # Query cabs
+    results, count = crud.list_cabs_by_location(
+        session=session,
+        lat=lat,
+        lon=lon,
+        radius_km=radius_km,
+        vehicle_type=vehicle_type,
+        min_capacity=min_capacity,
+        max_capacity=max_capacity,
+        limit=limit,
+        offset=offset,
+        sort_by_distance=sort_by_distance,
+    )
+
+    return {"data": results, "count": count}
 
 
 __all__ = ["router"]
