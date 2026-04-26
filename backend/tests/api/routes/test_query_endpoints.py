@@ -1169,7 +1169,7 @@ class TestQueryEndpoints:
         assert r.status_code == 403, "Normal user without staff role should get 403"
         
         # Test Case 3: Superuser can query → 200
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers", headers=superuser_token_headers)
+        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?location=Banglore", headers=superuser_token_headers)
         assert r.status_code == 200, "Superuser should be able to query"
         assert "data" in r.json()
         assert "count" in r.json()
@@ -1185,7 +1185,7 @@ class TestQueryEndpoints:
         assert r.status_code == 200
         
         # Now the user should be able to query
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers", headers=normal_user_headers)
+        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?lat=24.8704721&lon=67.0847214", headers=normal_user_headers)
         assert r.status_code == 200, "Agency staff should be able to query"
 
 
@@ -1216,14 +1216,14 @@ class TestQueryEndpoints:
         )
         provider_mumbai_id = provider_mumbai["id"]
         
-        # Test Case 1: Query all providers
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers", headers=superuser_token_headers)
+        # Test Case 1: Query all providers in india
+        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?location=india&radius_km=1500", headers=superuser_token_headers)
         assert r.status_code == 200
         assert r.json()["count"] >= 2, "Should find both providers"
         
         # Test Case 2: Query by Delhi location_id
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?location_id={loc_delhi.id}",
+            f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=20",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
@@ -1233,7 +1233,7 @@ class TestQueryEndpoints:
         
         # Test Case 3: Query by Mumbai location_id
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?location_id={loc_mumbai.id}",
+            f"{settings.API_V1_STR}/query/stay-providers?location=mumbai&radius_km=5",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
@@ -1241,10 +1241,17 @@ class TestQueryEndpoints:
         assert data["count"] == 1, "Should find only Mumbai provider"
         assert data["data"][0]["id"] == provider_mumbai_id
 
-
-    def test_query_stay_providers_by_amenities(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
+    def test_query_stay_providers_by_amenities(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session
+    ):
         """
-        Test filtering stay providers by amenities with AND semantics.
+        Test filtering stay providers by amenities with AND semantics + location filter.
+
+        All providers are created near Delhi.
+        Queries include location=delhi to ensure geo filtering is applied.
         
         Scenario:
         - Provider 1: rooms with [wifi, ac]
@@ -1258,36 +1265,52 @@ class TestQueryEndpoints:
         4. amenities=wifi,pool → Provider 3 only (both)
         5. amenities=wifi,notexists → No providers
         """
+
         phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(phone_number=phone_number, password=password)
+        )
+
+        # Common location (Delhi)
+        base_lat, base_lon = 28.7041, 77.1025
+
         # Provider 1: wifi + ac
-        prov1, unit1, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=20.0, lon=20.0, room_rate=100, amenity="wifi")
-        prov1_id = prov1["id"]
-        unit1_id = unit1["id"]
+        prov1, unit1, _ = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=base_lat, lon=base_lon, room_rate=100, amenity="wifi"
+        )
+        prov1_id, unit1_id = prov1["id"], unit1["id"]
+
         r = client.post(
             f"{settings.API_V1_STR}/providers/{prov1_id}/stay/units/{unit1_id}/amenities",
             headers=superuser_token_headers,
             json={"amenity": "ac", "amenity_scope": AmenityScope.COMMON}
         )
         assert r.status_code == 200
-        
+
         # Provider 2: pool + gym
-        prov2, unit2, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=21.0, lon=21.0, room_rate=150, amenity="pool")
-        prov2_id = prov2["id"]
-        unit2_id = unit2["id"]
+        prov2, unit2, _ = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=base_lat + 0.01, lon=base_lon + 0.01, room_rate=150, amenity="pool"
+        )
+        prov2_id, unit2_id = prov2["id"], unit2["id"]
+
         r = client.post(
             f"{settings.API_V1_STR}/providers/{prov2_id}/stay/units/{unit2_id}/amenities",
             headers=superuser_token_headers,
             json={"amenity": "gym", "amenity_scope": AmenityScope.COMMON}
         )
         assert r.status_code == 200
-        
+
         # Provider 3: wifi + pool + parking
-        prov3, unit3, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=22.0, lon=22.0, room_rate=200, amenity="wifi")
-        prov3_id = prov3["id"]
-        unit3_id = unit3["id"]
+        prov3, unit3, _ = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=base_lat + 0.02, lon=base_lon + 0.02, room_rate=200, amenity="wifi"
+        )
+        prov3_id, unit3_id = prov3["id"], unit3["id"]
+
         for amenity in ["pool", "parking"]:
             r = client.post(
                 f"{settings.API_V1_STR}/providers/{prov3_id}/stay/units/{unit3_id}/amenities",
@@ -1295,68 +1318,50 @@ class TestQueryEndpoints:
                 json={"amenity": amenity, "amenity_scope": AmenityScope.COMMON}
             )
             assert r.status_code == 200
-        
-        # Test Case 1: Single amenity = wifi (should get Providers 1, 3)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov1_id in provider_ids, "Provider 1 should have wifi"
-        assert prov3_id in provider_ids, "Provider 3 should have wifi"
-        assert prov2_id not in provider_ids, "Provider 2 should not have wifi"
-        
-        # Test Case 2: wifi AND ac (only Provider 1)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi,ac",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        data = r.json()
-        provider_ids = [p["id"] for p in data["data"]]
-        assert prov1_id in provider_ids, "Provider 1 should have both wifi and ac"
-        assert prov3_id not in provider_ids, "Provider 3 should not have ac"
-        
-        # Test Case 3: pool (should get Providers 2, 3)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=pool",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov2_id in provider_ids, "Provider 2 should have pool"
-        assert prov3_id in provider_ids, "Provider 3 should have pool"
-        assert prov1_id not in provider_ids, "Provider 1 should not have pool"
-        
-        # Test Case 4: wifi AND pool (only Provider 3)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi,pool",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        data = r.json()
-        provider_ids = [p["id"] for p in data["data"]]
-        assert prov3_id in provider_ids, "Provider 3 should have both wifi and pool"
-        assert prov1_id not in provider_ids, "Provider 1 should not have pool"
-        assert prov2_id not in provider_ids, "Provider 2 should not have wifi"
-        
-        # Test Case 5: Combo with non-existent amenity (no providers)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi,notexists",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov1_id not in provider_ids, "No provider should have both wifi and notexists"
-        assert prov2_id not in provider_ids, "No provider should have both wifi and notexists"
-        assert prov3_id not in provider_ids, "No provider should have both wifi and notexists"
 
+        base_url = f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=50"
 
-    def test_query_stay_providers_by_price_range(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
+        # Test Case 1: wifi → Providers 1, 3
+        r = client.get(f"{base_url}&amenities=wifi", headers=superuser_token_headers)
+        assert r.status_code == 200
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov1_id in ids, "Provider 1 should have wifi"
+        assert prov3_id in ids, "Provider 3 should have wifi"
+        assert prov2_id not in ids, "Provider 2 should not have wifi"
+
+        # Test Case 2: wifi AND ac → (only Provider 1)
+        r = client.get(f"{base_url}&amenities=wifi,ac", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov1_id in ids, "Provider 1 should have both wifi and ac"
+        assert prov3_id not in ids, "Provider 3 should not have ac"
+
+        # Test Case 3: pool → Providers 2, 3
+        r = client.get(f"{base_url}&amenities=pool", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov2_id in ids, "Provider 2 should have pool"
+        assert prov3_id in ids, "Provider 3 should have pool"
+        assert prov1_id not in ids, "Provider 1 should not have pool"
+
+        # Test Case 4: wifi AND pool → only Provider 3
+        r = client.get(f"{base_url}&amenities=wifi,pool", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov3_id in ids, "Provider 3 should have both wifi and pool"
+        assert prov1_id not in ids, "Provider 1 should not have pool"
+        assert prov2_id not in ids, "Provider 2 should not have wifi"
+
+        # Test Case 5: wifi + notexists → none (no providers)
+        r = client.get(f"{base_url}&amenities=wifi,notexists", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert len(ids) == 0
+
+    def test_query_stay_providers_by_price_range(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session
+    ):
         """
-        Test filtering stay providers by unit price range (min_price, max_price).
-        
+        Test filtering stay providers by unit price range + location filter.
         Scenario:
         - Provider A: unit with room_rate=100
         - Provider B: unit with room_rate=200
@@ -1369,82 +1374,79 @@ class TestQueryEndpoints:
         4. min_price=250 → only Provider C
         5. max_price=150 → only Provider A
         """
+
         phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        
-        # Create providers with different prices
-        prov_a, _, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=30.0, lon=30.0, room_rate=100)
-        prov_b, _, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=31.0, lon=31.0, room_rate=200)
-        prov_c, _, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=32.0, lon=32.0, room_rate=300)
-        
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(phone_number=phone_number, password=password)
+        )
+
+        base_lat, base_lon = 28.7041, 77.1025
+
+        prov_a, _, _ = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=base_lat, lon=base_lon, room_rate=100
+        )
+        prov_b, _, _ = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=base_lat + 0.01, lon=base_lon + 0.01, room_rate=200
+        )
+        prov_c, _, _ = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=base_lat + 0.02, lon=base_lon + 0.02, room_rate=300
+        )
+
         prov_a_id = prov_a["id"]
         prov_b_id = prov_b["id"]
         prov_c_id = prov_c["id"]
-        
-        # Test Case 1: Exact price 100
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?min_price=100&max_price=100",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov_a_id in provider_ids, "Provider A (100) should be found"
-        assert prov_b_id not in provider_ids, "Provider B (200) should not match price 100"
-        assert prov_c_id not in provider_ids, "Provider C (300) should not match price 100"
-        
-        # Test Case 2: Range 100-200
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?min_price=100&max_price=200",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov_a_id in provider_ids, "Provider A (100) should be in 100-200 range"
-        assert prov_b_id in provider_ids, "Provider B (200) should be in 100-200 range"
-        assert prov_c_id not in provider_ids, "Provider C (300) should not be in 100-200 range"
-        
-        # Test Case 3: Range 150-250 (only B)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?min_price=150&max_price=250",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        data = r.json()
-        provider_ids = [p["id"] for p in data["data"]]
-        assert prov_b_id in provider_ids, "Provider B (200) should be in 150-250 range"
-        assert prov_a_id not in provider_ids, "Provider A (100) should not be in 150-250 range"
-        assert prov_c_id not in provider_ids, "Provider C (300) should not be in 150-250 range"
-        
-        # Test Case 4: Only min_price (>= 250)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?min_price=250",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        data = r.json()
-        provider_ids = [p["id"] for p in data["data"]]
-        assert prov_c_id in provider_ids, "Provider C (300) should match min_price 250"
-        assert prov_a_id not in provider_ids, "Provider A (100) should not match min_price 250"
-        assert prov_b_id not in provider_ids, "Provider B (200) should not match min_price 250"
-        
-        # Test Case 5: Only max_price
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?max_price=150",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 200
-        data = r.json()
-        provider_ids = [p["id"] for p in data["data"]]
-        assert prov_a_id in provider_ids, "Provider A (100) should match max_price 150"
-        assert prov_b_id not in provider_ids, "Provider B (200) should not match max_price 150"
-        assert prov_c_id not in provider_ids, "Provider C (300) should not match max_price 150"
+
+        base_url = f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=20"
+
+        # Test Case 1
+        r = client.get(f"{base_url}&min_price=100&max_price=100", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov_a_id in ids, "Provider A (100) should be found"
+        assert prov_b_id not in ids, "Provider B (200) should not match price 100"
+        assert prov_c_id not in ids, "Provider C (300) should not match price 100"
+
+        # Test Case 2
+        r = client.get(f"{base_url}&min_price=100&max_price=200", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov_a_id in ids, "Provider A (100) should be in 100-200 range"
+        assert prov_b_id in ids, "Provider B (200) should be in 100-200 range"
+        assert prov_c_id not in ids, "Provider C (300) should not be in 100-200 range"
+
+        # Test Case 3
+        r = client.get(f"{base_url}&min_price=150&max_price=250", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov_b_id in ids
+        assert prov_a_id not in ids
+        assert prov_c_id not in ids
+
+        # Test Case 4
+        r = client.get(f"{base_url}&min_price=250", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov_c_id in ids, "Provider C (300) should match min_price 250"
+        assert prov_a_id not in ids, "Provider A (100) should not match min_price 250"
+        assert prov_b_id not in ids, "Provider B (200) should not match min_price 250"
+
+        # Test Case 5
+        r = client.get(f"{base_url}&max_price=150", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov_a_id in ids, "Provider A (100) should match max_price 150"
+        assert prov_b_id not in ids, "Provider B (200) should not match max_price 150"
+        assert prov_c_id not in ids, "Provider C (300) should not match max_price 150"
 
 
-    def test_query_stay_providers_by_pax_count(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
+    def test_query_stay_providers_by_pax_count(
+        self,
+        client: TestClient,
+        superuser_token_headers: dict[str, str],
+        db: Session
+    ):
         """
-        Test filtering stay providers by passenger count (occupancy).
-        
+        Test filtering stay providers by passenger count + location filter.
         Scenario:
         - Provider 1: one unit with max_occupancy=2
         - Provider 2: two units with max_occupancy=(3, 2) → total 5
@@ -1458,17 +1460,28 @@ class TestQueryEndpoints:
         5. pax_count=6 → Providers 2, 3
         6. pax_count=7 → no providers
         """
+
         phone_number = random_phone()
         password = random_lower_string()
-        owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        
+        owner = crud.create_user(
+            session=db,
+            user_create=UserCreate(phone_number=phone_number, password=password)
+        )
+
         from app.models.travel.location import Location
-        
-        # Provider 1: single unit, max_occupancy=2
-        loc1 = Location(id=uuid.uuid4(), latitude=40.0, longitude=40.0)
+
+        # Base location (Delhi)
+        base_lat, base_lon = 28.7041, 77.1025
+
+        # ------------------------
+        # Provider 1 (max = 2)
+        # single unit, max_occupancy=2
+        # ------------------------
+        loc1 = Location(id=uuid.uuid4(), latitude=base_lat, longitude=base_lon)
         db.add(loc1)
         db.commit()
         db.refresh(loc1)
+
         prov1_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Pax Provider 1",
@@ -1480,19 +1493,27 @@ class TestQueryEndpoints:
             "optimal_occupancy": 2,
             "max_occupancy": 2
         }
+
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=prov1_data)
         assert r.status_code == 201
         prov1_id = r.json()["id"]
-        
-        unit1_data = {"name": "Unit 1", "room_rate": 100, "max_occupancy": 2}
-        r = client.post(f"{settings.API_V1_STR}/providers/{prov1_id}/stay/units", headers=superuser_token_headers, json=unit1_data)
+
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{prov1_id}/stay/units",
+            headers=superuser_token_headers,
+            json={"name": "Unit 1", "room_rate": 100, "max_occupancy": 2}
+        )
         assert r.status_code == 200
-        
-        # Provider 2: two units, total capacity 5 (3 + 2), provider max_occupancy = 6
-        loc2 = Location(id=uuid.uuid4(), latitude=41.0, longitude=41.0)
+
+        # ------------------------
+        # Provider 2 (3 + 2 units, provider max = 6)
+        # two units, total capacity 5 (3 + 2), provider max_occupancy = 6
+        # ------------------------
+        loc2 = Location(id=uuid.uuid4(), latitude=base_lat + 0.01, longitude=base_lon + 0.01)
         db.add(loc2)
         db.commit()
         db.refresh(loc2)
+
         prov2_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Pax Provider 2",
@@ -1504,20 +1525,28 @@ class TestQueryEndpoints:
             "optimal_occupancy": 5,
             "max_occupancy": 6
         }
+
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=prov2_data)
         assert r.status_code == 201
         prov2_id = r.json()["id"]
-        
+
         for idx, occ in enumerate([3, 2]):
-            unit_data = {"name": f"Unit {idx + 1}", "room_rate": 100, "max_occupancy": occ}
-            r = client.post(f"{settings.API_V1_STR}/providers/{prov2_id}/stay/units", headers=superuser_token_headers, json=unit_data)
+            r = client.post(
+                f"{settings.API_V1_STR}/providers/{prov2_id}/stay/units",
+                headers=superuser_token_headers,
+                json={"name": f"Unit {idx+1}", "room_rate": 100, "max_occupancy": occ}
+            )
             assert r.status_code == 200
-        
-        # Provider 3: single unit, max_occupancy=6
-        loc3 = Location(id=uuid.uuid4(), latitude=42.0, longitude=42.0)
+
+        # ------------------------
+        # Provider 3 (max = 6)
+        # single unit, max_occupancy=6
+        # ------------------------
+        loc3 = Location(id=uuid.uuid4(), latitude=base_lat + 0.02, longitude=base_lon + 0.02)
         db.add(loc3)
         db.commit()
         db.refresh(loc3)
+
         prov3_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Pax Provider 3",
@@ -1529,53 +1558,55 @@ class TestQueryEndpoints:
             "optimal_occupancy": 6,
             "max_occupancy": 6
         }
+
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=prov3_data)
         assert r.status_code == 201
         prov3_id = r.json()["id"]
-        
-        unit3_data = {"name": "Unit 1", "room_rate": 100, "max_occupancy": 6}
-        r = client.post(f"{settings.API_V1_STR}/providers/{prov3_id}/stay/units", headers=superuser_token_headers, json=unit3_data)
+
+        r = client.post(
+            f"{settings.API_V1_STR}/providers/{prov3_id}/stay/units",
+            headers=superuser_token_headers,
+            json={"name": "Unit 1", "room_rate": 100, "max_occupancy": 6}
+        )
         assert r.status_code == 200
-        
+
+        # ------------------------
+        # Queries (WITH location)
+        # ------------------------
+        base_url = f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=50"
+
         # Test Case 1: pax_count=1 (all providers)
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?pax_count=1", headers=superuser_token_headers)
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov1_id in provider_ids, "Provider 1 has capacity >= 1"
-        assert prov2_id in provider_ids, "Provider 2 has capacity >= 1"
-        assert prov3_id in provider_ids, "Provider 3 has capacity >= 1"
-        
+        r = client.get(f"{base_url}&pax_count=1", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov1_id in ids, "Provider 1 has capacity >= 1"
+        assert prov2_id in ids, "Provider 2 has capacity >= 1"
+        assert prov3_id in ids, "Provider 3 has capacity >= 1"
+
         # Test Case 2: pax_count=2 (all providers)
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?pax_count=2", headers=superuser_token_headers)
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov1_id in provider_ids, "Provider 1 (max_occ 2) has capacity >= 2"
-        assert prov2_id in provider_ids, "Provider 2 (total 5) has capacity >= 2"
-        assert prov3_id in provider_ids, "Provider 3 (max_occ 6) has capacity >= 2"
-        
+        r = client.get(f"{base_url}&pax_count=2", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov1_id in ids, "Provider 1 (max_occ 2) has capacity >= 2"
+        assert prov2_id in ids, "Provider 2 (total 5) has capacity >= 2"
+        assert prov3_id in ids, "Provider 3 (max_occ 6) has capacity >= 2"
+
         # Test Case 3: pax_count=3 (should get Providers 2, 3)
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?pax_count=3", headers=superuser_token_headers)
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov1_id not in provider_ids, "Provider 1 (max_occ 2) should NOT have capacity >= 3"
-        assert prov2_id in provider_ids, "Provider 2 (total 5) has capacity >= 3"
-        assert prov3_id in provider_ids, "Provider 3 (max_occ 6) has capacity >= 3"
-        
+        r = client.get(f"{base_url}&pax_count=3", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov1_id not in ids, "Provider 1 (max_occ 2) should NOT have capacity >= 3"
+        assert prov2_id in ids, "Provider 2 (total 5) has capacity >= 3"
+        assert prov3_id in ids, "Provider 3 (max_occ 6) has capacity >= 3"
+
         # Test Case 4: pax_count=6 (should get Providers 2 and 3 based on stay-provider max_occupancy)
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?pax_count=6", headers=superuser_token_headers)
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov1_id not in provider_ids, "Provider 1 (max 2) cannot accommodate pax_count 6"
-        assert prov2_id in provider_ids, "Provider 2 (provider max_occ 6) can accommodate pax_count 6"
-        assert prov3_id in provider_ids, "Provider 3 (max_occ 6) can accommodate pax_count 6"
-        
+        r = client.get(f"{base_url}&pax_count=6", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert prov1_id not in ids
+        assert prov2_id in ids
+        assert prov3_id in ids
+
         # Test Case 5: pax_count=7 (no providers)
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?pax_count=7", headers=superuser_token_headers)
-        assert r.status_code == 200
-        provider_ids = [p["id"] for p in r.json()["data"]]
-        assert prov1_id not in provider_ids, "Provider 1 cannot accommodate pax_count 7"
-        assert prov2_id not in provider_ids, "Provider 2 cannot accommodate pax_count 7"
-        assert prov3_id not in provider_ids, "Provider 3 cannot accommodate pax_count 7"
+        r = client.get(f"{base_url}&pax_count=7", headers=superuser_token_headers)
+        ids = [p["id"] for p in r.json()["data"]]
+        assert len(ids) == 0
 
     def test_query_stay_providers_by_room_count(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         """
@@ -1585,69 +1616,107 @@ class TestQueryEndpoints:
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
+        # Base location (Delhi) to ensure all providers fall within query radius
+        base_lat, base_lon = 28.7041, 77.1025
+
         # Provider 1: 2 rooms
         prov1, unit1, loc_a = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
-            lat=50.0, lon=50.0, room_rate=100, amenity="wifi", room_count=2
+            lat=base_lat, lon=base_lon, room_rate=100, amenity="wifi", room_count=2
         )
         prov1_id = prov1["id"]
 
         # Provider 2: 3 rooms
         prov2, unit2, loc_b = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
-            lat=51.0, lon=51.0, room_rate=150, amenity="pool", room_count=3
+            lat=base_lat + 0.01, lon=base_lon + 0.01, room_rate=150, amenity="pool", room_count=3
         )
         prov2_id = prov2["id"]
 
         # Provider 3: 4 rooms
         prov3, unit3, loc_c = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
-            lat=52.0, lon=52.0, room_rate=200, amenity="wifi", room_count=4
+            lat=base_lat + 0.02, lon=base_lon + 0.02, room_rate=200, amenity="wifi", room_count=4
         )
         prov3_id = prov3["id"]
 
+        base_url = f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=50"
+
         # Test Case 1: room_count=2 (should get Providers 1, 2, and 3)
-        r = client.get(f"{settings.API_V1_STR}/query/stay-providers?room_count=2", headers=superuser_token_headers)
+        r = client.get(f"{base_url}&room_count=2", headers=superuser_token_headers)
         assert r.status_code == 200
         provider_ids = [p["id"] for p in r.json()["data"]]
+
         assert prov1_id in provider_ids, "Provider 1 has at least 2 rooms"
         assert prov2_id in provider_ids, "Provider 2 has at least 2 rooms"
         assert prov3_id in provider_ids, "Provider 3 has at least 2 rooms"
 
+        # Test Case 2: room_count=3 → Providers 2, 3
+        r = client.get(f"{base_url}&room_count=3", headers=superuser_token_headers)
+        assert r.status_code == 200
+        provider_ids = [p["id"] for p in r.json()["data"]]
+
+        assert prov1_id not in provider_ids, "Provider 1 has only 2 rooms"
+        assert prov2_id in provider_ids, "Provider 2 has at least 3 rooms"
+        assert prov3_id in provider_ids, "Provider 3 has at least 3 rooms"
+
+        # Test Case 3: room_count=4 → Provider 3 only
+        r = client.get(f"{base_url}&room_count=4", headers=superuser_token_headers)
+        assert r.status_code == 200
+        provider_ids = [p["id"] for p in r.json()["data"]]
+
+        assert prov1_id not in provider_ids, "Provider 1 has only 2 rooms"
+        assert prov2_id not in provider_ids, "Provider 2 has only 3 rooms"
+        assert prov3_id in provider_ids, "Provider 3 has 4 rooms"
+
+        # Test Case 4: room_count=5 → none
+        r = client.get(f"{base_url}&room_count=5", headers=superuser_token_headers)
+        assert r.status_code == 200
+        provider_ids = [p["id"] for p in r.json()["data"]]
+
+        assert len(provider_ids) == 0, "No provider has >= 5 rooms"
+
     def test_query_stay_providers_combined_filters(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         """
         Test combined filtering with multiple parameters.
-        
+
         Scenario:
         - Provider 1: location A, rooms with wifi, price 100
         - Provider 2: location B, rooms with pool, price 150
         - Provider 3: location A, rooms with wifi + pool, price 200
-        
+
         Test Cases:
-        1. location_id=A && min_price=100 → Providers 1, 3
-        2. location_id=A && amenities=wifi && max_price=150 → Provider 1 only
+        1. location=A && min_price=100 → Providers 1, 3
+        2. location=A && amenities=wifi && max_price=150 → Provider 1 only
         3. amenities=wifi,pool && min_price=200 → Provider 3
-        4. location_id=B && amenities=wifi → no providers (location B has no wifi)
+        4. location=B && amenities=wifi → no providers (location B has no wifi)
         """
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        
+
+        # Base coordinates for locations
+        # Location A → Delhi cluster
+        base_lat_a, base_lon_a = 28.7041, 77.1025
+
+        # Location B → Mumbai cluster
+        base_lat_b, base_lon_b = 19.0760, 72.8777
+
         # Provider 1: location A, wifi, price 100
         prov1, unit1, loc_a = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
-            lat=50.0, lon=50.0, room_rate=100, amenity="wifi"
+            lat=base_lat_a, lon=base_lon_a, room_rate=100, amenity="wifi"
         )
         prov1_id = prov1["id"]
-        
+
         # Provider 2: location B, pool, price 150
         prov2, unit2, loc_b = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
-            lat=51.0, lon=51.0, room_rate=150, amenity="pool"
+            lat=base_lat_b, lon=base_lon_b, room_rate=150, amenity="pool"
         )
         prov2_id = prov2["id"]
         unit2_id = unit2["id"]
-        
+
         # Provider 3: same location as Provider 1 (location A), wifi + pool, price 200
         # IMPORTANT: Need to create provider 3 at SAME location as provider 1 but get same location object
         # We'll manually create it in location A
@@ -1662,13 +1731,13 @@ class TestQueryEndpoints:
         assert r.status_code == 201
         prov3 = r.json()
         prov3_id = prov3["id"]
-        
+
         unit3_data = {"name": "Unit 1", "room_rate": 200}
         r = client.post(f"{settings.API_V1_STR}/providers/{prov3_id}/stay/units", headers=superuser_token_headers, json=unit3_data)
         assert r.status_code == 200
         unit3 = r.json()
         unit3_id = unit3["id"]
-        
+
         # Add wifi amenity
         r = client.post(
             f"{settings.API_V1_STR}/providers/{prov3_id}/stay/units/{unit3_id}/amenities",
@@ -1676,7 +1745,7 @@ class TestQueryEndpoints:
             json={"amenity": "wifi", "amenity_scope": AmenityScope.COMMON}
         )
         assert r.status_code == 200
-        
+
         # Add pool amenity
         r = client.post(
             f"{settings.API_V1_STR}/providers/{prov3_id}/stay/units/{unit3_id}/amenities",
@@ -1684,10 +1753,10 @@ class TestQueryEndpoints:
             json={"amenity": "pool", "amenity_scope": AmenityScope.COMMON}
         )
         assert r.status_code == 200
-        
+
         # Test Case 1: location A && min_price 100
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?location_id={loc_a.id}&min_price=100",
+            f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=25&min_price=100",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
@@ -1695,10 +1764,10 @@ class TestQueryEndpoints:
         assert prov1_id in provider_ids, "Provider 1 in location A with price 100 >= 100"
         assert prov3_id in provider_ids, "Provider 3 in location A with price 200 >= 100"
         assert prov2_id not in provider_ids, "Provider 2 is in location B, not A"
-        
+
         # Test Case 2: location A && wifi && max_price 150
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?location_id={loc_a.id}&amenities=wifi&max_price=150",
+            f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=25&amenities=wifi&max_price=150",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
@@ -1706,10 +1775,10 @@ class TestQueryEndpoints:
         provider_ids = [p["id"] for p in data["data"]]
         assert prov1_id in provider_ids, "Provider 1 matches all filters"
         assert prov3_id not in provider_ids, "Provider 3 price 200 exceeds max_price 150"
-        
+
         # Test Case 3: wifi AND pool && min_price 200
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi,pool&min_price=200",
+            f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=25&amenities=wifi,pool&min_price=200",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
@@ -1717,10 +1786,10 @@ class TestQueryEndpoints:
         provider_ids = [p["id"] for p in data["data"]]
         assert prov3_id in provider_ids, "Provider 3 has both wifi and pool with price 200 >= 200"
         assert prov1_id not in provider_ids, "Provider 1 does not have pool"
-        
+
         # Test Case 4: location B && wifi (should be empty)
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?location_id={loc_b.id}&amenities=wifi",
+            f"{settings.API_V1_STR}/query/stay-providers?location=mumbai&radius_km=25&amenities=wifi",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
@@ -1740,118 +1809,135 @@ class TestQueryEndpoints:
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        
+
+        # Base location (Delhi cluster)
+        base_lat, base_lon = 28.7041, 77.1025
+
         # Create 5 providers with unique amenity to ensure we can filter to just these
         unique_amenity = f"pagtest_{random_lower_string()}"
         provider_ids = []
+
         for i in range(5):
             provider, unit, _ = create_stay_provider_with_unit(
                 client, superuser_token_headers, db, owner,
-                lat=60.0 + i, lon=60.0 + i, room_rate=100 + (i * 50), amenity=unique_amenity
+                lat=base_lat + (i * 0.01),  # keep within radius
+                lon=base_lon + (i * 0.01),
+                room_rate=100 + (i * 50),
+                amenity=unique_amenity
             )
             provider_ids.append(provider["id"])
-        
+
+        base_url = f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=50&amenities={unique_amenity}"
+
         # Test Case 1: Get first 2 (limit=2, offset=0)
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities={unique_amenity}&limit=2&offset=0",
+            f"{base_url}&limit=2&offset=0",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
         assert len(r.json()["data"]) == 2, "limit=2 should return 2 items"
-        
+
         # Test Case 2: Get next 2 (limit=2, offset=2)
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities={unique_amenity}&limit=2&offset=2",
+            f"{base_url}&limit=2&offset=2",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
         assert len(r.json()["data"]) == 2, "limit=2 should return 2 items"
-        
+
         # Test Case 3: Get last item (limit=2, offset=4)
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities={unique_amenity}&limit=2&offset=4",
+            f"{base_url}&limit=2&offset=4",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
         assert len(r.json()["data"]) == 1, "Last item should return 1 result"
-        
+
         # Test Case 4: Out of bounds offset
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities={unique_amenity}&limit=2&offset=100",
+            f"{base_url}&limit=2&offset=100",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
         assert len(r.json()["data"]) == 0, "Out of bounds offset should return empty"
-        
+
         # Test Case 5: Validate limit bounds (max 500)
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?limit=501",
+            f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=50&limit=501",
             headers=superuser_token_headers
         )
         assert r.status_code == 422, "limit > 500 should be rejected"
 
-
     def test_query_stay_providers_input_validation(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         """
         Test input validation for /query/stay-providers endpoint.
-        
+
         Test Cases:
         1. Invalid limit (0) → 422
         2. Invalid limit (501) → 422
         3. Invalid offset (-1) → 422
         4. Invalid pax_count (0) → 422
-        5. Invalid location_id (not UUID) → 422
-        6. Invalid rating (-1) → 422
+        5. Invalid location (empty string) → 422
+        6. Invalid latitude → 422
+        7. Invalid longitude → 422
+        8. Invalid radius_km (negative) → 422
         """
+
         # Test Case 1: Invalid limit (0)
         r = client.get(
             f"{settings.API_V1_STR}/query/stay-providers?limit=0",
             headers=superuser_token_headers
         )
         assert r.status_code == 422, "limit=0 should be rejected"
-        
+
         # Test Case 2: Invalid limit (501)
         r = client.get(
             f"{settings.API_V1_STR}/query/stay-providers?limit=501",
             headers=superuser_token_headers
         )
         assert r.status_code == 422, "limit > 500 should be rejected"
-        
+
         # Test Case 3: Invalid offset
         r = client.get(
             f"{settings.API_V1_STR}/query/stay-providers?offset=-1",
             headers=superuser_token_headers
         )
         assert r.status_code == 422, "offset < 0 should be rejected"
-        
+
         # Test Case 4: Invalid pax_count
         r = client.get(
             f"{settings.API_V1_STR}/query/stay-providers?pax_count=0",
             headers=superuser_token_headers
         )
         assert r.status_code == 422, "pax_count < 1 should be rejected"
-        
-        # Test Case 5: Invalid location_id (not UUID)
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?location_id=not-a-uuid",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 422, "Invalid UUID should be rejected"
-        
-        # Test Case 6: Invalid rating
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?min_rating=-1",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 422, "Negative rating should be rejected"
-        
-        # Test Case 7: Rating > 5
-        r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?min_rating=5.1",
-            headers=superuser_token_headers
-        )
-        assert r.status_code == 422, "Rating > 5 should be rejected"
 
+        # Test Case 5: Invalid location (empty)
+        r = client.get(
+            f"{settings.API_V1_STR}/query/stay-providers?location=",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 400, "Empty location should be rejected"
+
+        # Test Case 6: Invalid latitude
+        r = client.get(
+            f"{settings.API_V1_STR}/query/stay-providers?lat=invalid&lon=77.1",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 422, "Invalid latitude should be rejected"
+
+        # Test Case 7: Invalid longitude
+        r = client.get(
+            f"{settings.API_V1_STR}/query/stay-providers?lat=28.7&lon=invalid",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 422, "Invalid longitude should be rejected"
+
+        # Test Case 8: Invalid radius_km
+        r = client.get(
+            f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=-10",
+            headers=superuser_token_headers
+        )
+        assert r.status_code == 422, "Negative radius_km should be rejected"    
 
     def test_query_stay_providers_comma_separated_amenities(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         """
@@ -1867,7 +1953,13 @@ class TestQueryEndpoints:
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         
-        prov, unit, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=70.0, lon=70.0, room_rate=100, amenity="wifi")
+        # Base location (Delhi cluster)
+        base_lat, base_lon = 28.7041, 77.1025
+        
+        prov, unit, _ = create_stay_provider_with_unit(
+            client, superuser_token_headers, db, owner,
+            lat=base_lat, lon=base_lon, room_rate=100, amenity="wifi"
+        )
         prov_id = prov["id"]
         unit_id = unit["id"]
         
@@ -1880,32 +1972,37 @@ class TestQueryEndpoints:
             )
             assert r.status_code == 200
         
+        base_url = f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=50"
+        
         # Test Case 1: Repeated params
         r1 = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi&amenities=ac",
+            f"{base_url}&amenities=wifi&amenities=ac",
             headers=superuser_token_headers
         )
         assert r1.status_code == 200
-        count1 = r1.json()["count"]
+        ids1 = [p["id"] for p in r1.json()["data"]]
         
         # Test Case 2: Comma-separated
         r2 = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi,ac",
+            f"{base_url}&amenities=wifi,ac",
             headers=superuser_token_headers
         )
         assert r2.status_code == 200
-        count2 = r2.json()["count"]
+        ids2 = [p["id"] for p in r2.json()["data"]]
         
-        # Both should return same count
-        assert count1 == count2, "Repeated params and comma-separated should give same results"
+        # Both should return same providers
+        assert set(ids1) == set(ids2), "Repeated params and comma-separated should give same results"
+        assert prov_id in ids1, "Provider should be returned in both cases"
         
         # Test Case 3: Deduplication of repeated amenities
         r = client.get(
-            f"{settings.API_V1_STR}/query/stay-providers?amenities=wifi,wifi,ac",
+            f"{base_url}&amenities=wifi,wifi,ac",
             headers=superuser_token_headers
         )
         assert r.status_code == 200
-        assert r.json()["count"] == count1, "Duplicates should dedupe correctly"
+        ids3 = [p["id"] for p in r.json()["data"]]
+        
+        assert set(ids3) == set(ids1), "Duplicates should dedupe correctly"
 
 
     def test_query_cabs_with_capacity_and_rate_filters(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):

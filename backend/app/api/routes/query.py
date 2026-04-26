@@ -6,6 +6,7 @@ These endpoints provide flexible searching capabilities with support for:
 - Price range filtering
 - Passenger capacity filtering (pax_count)
 - Location-based geographic searches (latitude/longitude with radius)
+- Location name resolution (e.g., "Bangalore", "New York") with automatic geocoding
 - Vehicle type filtering for cabs
 - Pagination (limit and offset)
 
@@ -15,6 +16,13 @@ Authorization:
 - /query/cabs: public (no auth required)
 - /query/drivers: public (no auth required)
 - /query/stay-units-near: superuser or agency staff only
+
+Location Resolution:
+- Geographic endpoints support both lat/lon coordinates AND place names
+- Provide either `location` (place name) OR `lat`/`lon` (coordinates)
+- Automatic resolution via OpenStreetMap Nominatim API when location name provided
+- Results cached in LocationLookup table for performance
+- In-memory cache with 24-hour TTL
 """
 
 import uuid
@@ -31,23 +39,26 @@ from app.schemas.provider.stays import (
 from app.schemas.provider.cab import CabsList, DriversList
 from app.api.routes.agency import is_agency_staff
 from app.models.travel.enums import VehicleType
+from app.services.geolocation import resolve_location
 
 router = APIRouter(prefix="/query", tags=["query"])
 
 
 # Search endpoint for stay providers with flexible filtering:
 @router.get("/stay-providers", response_model=PublicStayProviderList)
-def list_stay_providers(
+async def list_stay_providers(
     *,
     session: SessionDep,
     current_user: CurrentUser,
-    location_id: uuid.UUID = Query(default=None, description="Filter by location ID"),
+    location: str = Query(default=None, description="Place name to search near (e.g., 'Bangalore', 'New York'). If provided with radius_km, performs geo-filtered search."),
+    lat: float = Query(default=None, description="Latitude: if provided with lon and radius_km, performs geo-filtered search"),
+    lon: float = Query(default=None, description="Longitude: if provided with lat and radius_km, performs geo-filtered search"),
+    radius_km: float = Query(default=10.0, ge=0.1, description="Search radius in kilometers when `location` or `lat`/`lon` is provided"),
     min_price: int = Query(default=None, ge=0, description="Minimum room rate to filter units"),
     max_price: int = Query(default=None, ge=0, description="Maximum room rate to filter units"),
     pax_count: int = Query(default=None, ge=1, description="Minimum occupancy required: filters providers with units that can accommodate pax_count guests"),
     room_count: int = Query(default=None, ge=1, description="Minimum number of rooms required: filters providers with at least this many rooms"),
     amenities: List[str] = Query(default=None, description="List of required amenities (AND semantics: provider units must have ALL listed amenities)"),
-    min_rating: float = Query(default=None, ge=0.0, le=5.0, description="Minimum average rating filter (reserved for future use)"),
     limit: int = Query(default=100, ge=1, le=500, description="Max results per page"),
     offset: int = Query(default=0, ge=0, description="Results to skip (pagination)"),
 ) -> dict:
@@ -56,18 +67,22 @@ def list_stay_providers(
     
     **Authorization**: superuser or agency staff only.
     
+    **Location-Based Search** (optional):
+    - `location`: Place name (e.g., "Bangalore"). Automatically resolves to coordinates.
+    - `lat` + `lon`: Direct coordinates. If provided, filters providers by location.
+    - `radius_km`: Search radius in kilometers (default 10km, used with location or lat/lon)
+    
     **Filtering Logic** (all optional, combined with AND logic):
-    - `location_id`: Filter providers by their location ID
     - `min_price` / `max_price`: Filter providers by unit room_rate (inclusive bounds)
     - `pax_count`: Filter providers with units that have sufficient capacity. A provider matches if:
       - Any of its units has max_occupancy >= pax_count, OR
       - The sum of all its units' max_occupancy >= pax_count
+    - `room_count`: Filter providers that have at least this many rooms across all their units.
     - `amenities`: AND semantics. Provider must have units with ALL listed amenities to match.
       - Examples: 
         - `?amenities=wifi&amenities=ac` → providers whose units have both wifi AND ac
         - `?amenities=wifi,pool` → providers whose units have both wifi AND pool (auto-parsed)
         - Handles duplicates and whitespace gracefully
-    - `min_rating`: Filter providers with average rating >= min_rating (reserved for future rating system)
 
     **Pagination**: Use `limit` and `offset` together for cursor-based pagination.
 
@@ -75,7 +90,9 @@ def list_stay_providers(
     
     **Example Queries**:
     ```
-    GET /query/stay-providers?location_id=abc-123&min_price=100&max_price=500&pax_count=4
+    GET /query/stay-providers?location=Bangalore&radius_km=15&min_price=100&max_price=500&sort_by_distance=true
+    GET /query/stay-providers?lat=12.97&lon=77.59&radius_km=10&min_price=100&max_price=500
+    GET /query/stay-providers?location=bangalore&amenities=wifi&amenities=pool
     GET /query/stay-providers?amenities=wifi&amenities=pool&amenities=parking
     GET /query/stay-providers?amenities=wifi,pool,parking
     ```
@@ -83,6 +100,7 @@ def list_stay_providers(
     if not current_user.is_superuser and not is_agency_staff(session, current_user):
         raise HTTPException(status_code=403, detail="Not authorized to query stay providers")
 
+    # Normalize amenities
     # Fallback support to comma-separated value queries like '/stay-providers?amenities=wifi,pool'
     # small parser to convert comma-separated value to amenity list
     if amenities and len(amenities) == 1 and "," in amenities[0]:
@@ -97,15 +115,26 @@ def list_stay_providers(
                 normalized.append(candidate)
         amenities = normalized or None
 
+    # Resolve location name to coordinates if provided
+    if location:
+        coords = await resolve_location(location, session)
+        if not coords:
+            raise HTTPException(status_code=400, detail=f"Could not resolve location '{location}'. Please try a different place name.")
+        lat, lon = coords
+    elif lat is None or lon is None:
+        raise HTTPException(status_code=400, detail="Either 'location' or both 'lat' and 'lon' must be provided.")
+
+    # Perform geo-filtered query
     providers, count = crud.list_stay_providers(
         session=session,
-        location_id=str(location_id) if location_id else None,
+        lat=lat,
+        lon=lon,
+        radius_km=radius_km,
         min_price=min_price,
         max_price=max_price,
         pax_count=pax_count,
         room_count=room_count,
         amenities=amenities,
-        min_rating=min_rating,
         limit=limit,
         offset=offset,
     )

@@ -353,9 +353,6 @@ class TestStayAmenities:
         assert r.status_code == 403
 
 
-# Agency-specific comprehensive tests moved to tests/api/routes/test_agencies.py
-
-
 class TestListStayUnits:
     """Test GET /query/units endpoint."""
 

@@ -188,25 +188,25 @@ def remove_agency_staff(*, session: Session, db_staff: TravelAgencyStaff) -> Non
 def list_stay_providers(
     *,
     session: Session,
-    location_id: str | None = None,
+    lat: float,
+    lon: float,
+    radius_km: float = 10.0,
     min_price: int | None = None,
     max_price: int | None = None,
     room_count: int | None = None,
     pax_count: int | None = None,
     amenities: List[str] | None = None,
-    min_rating: float | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[List[StayServiceProvider], int]:
     """
-    List stay providers with flexible filtering and pagination.
+    List stay providers with flexible filtering, geo search, and pagination.
     
     **Filters** (all optional, combined with AND logic):
-    - `location_id`: Filter by provider location ID
+    - Supports geo search via (lat, lon, radius_km)
     - `min_price` / `max_price`: Filter by unit room_rate (inclusive)
     - `pax_count`: Filter providers with units having sufficient capacity
     - `amenities`: AND semantics. Providers must have units with ALL listed amenities
-    - `min_rating`: Filter by minimum average rating (reserved for future use)
     
     **Pagination**: 
     - Results offset by `offset` items
@@ -215,16 +215,28 @@ def list_stay_providers(
     **Return**: Tuple of (results: List[StayServiceProvider], count: int)
     """
     # Start from stay-specific provider rows and join the base provider metadata.
+    # Base query
     statement = (
         select(StayServiceProvider)
         .join(ServiceProvider, StayServiceProvider.provider_id == ServiceProvider.id)
         .where(ServiceProvider.provider_type == "STAY")
     )
     
-    # Filter by location if specified
-    if location_id:
-        statement = statement.where(ServiceProvider.location_id == location_id)
+    # Step 1: Pre-filter providers using bounding box
+    # --- GEO FILTER (bounding box pre-filter) ---
+    if lat is not None and lon is not None:
+        provider_ids = _providers_within_bbox(
+            session=session,
+            lat=lat,
+            lon=lon,
+            radius_km=radius_km,
+        )
+        if not provider_ids:
+            return [], 0
+
+        statement = statement.where(ServiceProvider.id.in_(set(provider_ids)))
     
+    # --- PROVIDER LEVEL FILTERS ---
     # Filter by stay-provider level occupancy if specified
     if pax_count:
         statement = statement.where(StayServiceProvider.max_occupancy >= pax_count)
@@ -233,12 +245,17 @@ def list_stay_providers(
     if room_count:
         statement = statement.where(StayServiceProvider.room_count >= room_count)
 
+    # --- UNIT-LEVEL FILTERS ---
     # Check if we have any unit-based filters (price, pax, amenities)
-    has_unit_filters = min_price is not None or max_price is not None or amenities
-    
+    has_unit_filters = (
+        min_price is not None
+        or max_price is not None
+        or amenities
+    )
+
     if has_unit_filters:
         statement = statement.join(StayUnit, StayUnit.provider_id == ServiceProvider.id)
-        
+
         # Filter by price range
         if min_price is not None:
             statement = statement.where(StayUnit.room_rate >= min_price)
@@ -263,6 +280,8 @@ def list_stay_providers(
         statement = statement.distinct()
     
     # Apply pagination
+
+    # --- FETCH RESULTS ---
     results = session.exec(
         statement.options(selectinload(StayServiceProvider.provider))
         .offset(offset)
