@@ -1,13 +1,13 @@
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from sqlmodel import SQLModel, Field
 from sqlmodel import Column, DateTime, func
 
 
 class EnquiryDetails(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
-    
+    id: UUID = Field(default_factory=uuid4, primary_key=True)    
+
     adult_men_count: Optional[int] = Field(default=None)
     adult_women_count: Optional[int] = Field(default=None)
     adult_no_binary_count: Optional[int] = Field(default=None)

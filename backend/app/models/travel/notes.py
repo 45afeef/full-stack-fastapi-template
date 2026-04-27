@@ -1,11 +1,11 @@
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from sqlmodel import SQLModel, Field
 from sqlmodel import Column, DateTime, func
 
 class Note(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     title: Optional[str] = Field(default=None)
     message: Optional[str] = Field(default=None)
     created_by: UUID = Field(foreign_key="user.id")

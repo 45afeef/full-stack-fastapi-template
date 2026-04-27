@@ -1,5 +1,5 @@
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from sqlmodel import SQLModel, Field
 from sqlmodel import Column, DateTime, func
@@ -8,7 +8,7 @@ from .enums import BookingStatus, RoomType
 
 
 class Booking(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     traveler_id: UUID = Field(foreign_key="profile.id")
     travel_agency_id: Optional[UUID] = Field(default=None, foreign_key="travelagency.id")
     travel_agency_staff_id: Optional[UUID] = Field(default=None, foreign_key="travelagencystaff.id")
@@ -27,7 +27,7 @@ class Booking(SQLModel, table=True):
 
 
 class BookingTraveller(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     booking_id: UUID = Field(foreign_key="booking.id")
     traveller_id: UUID = Field(foreign_key="profile.id")
     created_at: Optional[datetime] = Field(
@@ -41,7 +41,7 @@ class BookingTraveller(SQLModel, table=True):
     )
 
 class BookingCab(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     cab_id: UUID = Field(foreign_key="cab.id")
     booking_id: UUID = Field(foreign_key="booking.id")
     cab_provider_id: UUID = Field(foreign_key="cabserviceprovider.provider_id")
@@ -63,7 +63,7 @@ class BookingCab(SQLModel, table=True):
     )
 
 class BookingStay(SQLModel, table=True):
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     stayunit_id: UUID = Field(foreign_key="stayunit.id")
     booking_id: UUID = Field(foreign_key="booking.id")
     stay_provider_id: UUID = Field(foreign_key="stayserviceprovider.provider_id")
@@ -76,7 +76,6 @@ class BookingStay(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
-
     updated_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),

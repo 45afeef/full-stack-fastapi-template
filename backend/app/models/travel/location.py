@@ -6,7 +6,7 @@ from sqlmodel import SQLModel, Field, Column, DateTime, func
 
 class Location(SQLModel, table=True):
     """Represents a geographic location with latitude and longitude coordinates."""
-    id: UUID = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     latitude: float = Field(nullable=False)
     longitude: float = Field(nullable=False)
 
