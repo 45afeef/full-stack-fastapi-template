@@ -21,12 +21,15 @@ def test_create_and_delete_provider_workflow(client: TestClient, superuser_token
         "provider_name": "Test Provider",
         "owner_id": str(user.id),
         "created_by": str(user.id),
+        "latitude": 40.7128,  # New York latitude
+        "longitude": -74.0060,  # New York longitude
     }
 
     r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
     assert r.status_code == 201
     provider = r.json()
     provider_id = provider["id"]
+    assert provider["location_id"] is not None  # Verify location was created
 
     # delete provider
     r = client.delete(f"{settings.API_V1_STR}/providers/{provider_id}", headers=superuser_token_headers)
@@ -45,11 +48,14 @@ def test_stay_unit_permissions(client: TestClient, superuser_token_headers: dict
         "provider_name": "Unit Provider",
         "owner_id": str(user.id),
         "created_by": str(user.id),
+        "latitude": 40.7128,  # New York latitude
+        "longitude": -74.0060,  # New York longitude
     }
     r = client.post(f"{settings.API_V1_STR}/providers", headers=superuser_token_headers, json=provider_data)
     assert r.status_code == 201
     provider = r.json()
     provider_id = provider["id"]
+    assert provider["location_id"] is not None  # Verify location was created
 
     # create unit as superuser
     unit_data = {"name": "Room 1", "room_rate": 100}

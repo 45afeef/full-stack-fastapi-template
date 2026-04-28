@@ -9,6 +9,14 @@ class Location(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     latitude: float = Field(nullable=False)
     longitude: float = Field(nullable=False)
+    created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
+    )
 
 
 class LocationLookup(SQLModel, table=True):

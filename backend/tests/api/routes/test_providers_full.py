@@ -22,6 +22,8 @@ class TestProviderCRUDAndPermissions:
             "provider_name": "Test Provider",
             "owner_id": str(uuid.uuid4()),
             "created_by": str(uuid.uuid4()),
+            "latitude": 40.7128,
+            "longitude": -74.0060,
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=body)
         assert r.status_code == 422
@@ -58,11 +60,14 @@ class TestProviderCRUDAndPermissions:
             "provider_name": "Test Provider",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
+            "latitude": 40.7128,
+            "longitude": -74.0060,
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
         assert r.status_code == 201
         provider = r.json()
         provider_id = provider["id"]
+        assert provider["location_id"] is not None  # Verify location was created
 
         # Unauthenticated request cannot create provider
         r = client.post(f"{settings.API_V1_STR}/providers/", json=provider_data)
@@ -148,6 +153,8 @@ class TestProviderCRUDAndPermissions:
             "provider_name": "ABC Cab Provider",
             "owner_id": str(user.id),
             "created_by": str(user.id),
+            "latitude": 40.7128,  # New York latitude
+            "longitude": -74.0060,  # New York longitude
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
         assert r.status_code == 201
@@ -224,6 +231,8 @@ class TestProviderCRUDAndPermissions:
             "provider_name": "Stay Provider",
             "owner_id": str(user.id),
             "created_by": str(user.id),
+            "latitude": 40.7128,  # New York latitude
+            "longitude": -74.0060,  # New York longitude
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
         assert r.status_code == 201

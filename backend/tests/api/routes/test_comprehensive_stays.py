@@ -35,6 +35,8 @@ class TestCreateStayProvider:
             "provider_name": "Test Hotel",
             "owner_id": str(user.id),
             "created_by": str(user.id),
+            "latitude": 40.7128,  # New York latitude
+            "longitude": -74.0060,  # New York longitude
         }
 
         r = client.post(

@@ -15,6 +15,7 @@ from app.models.travel.providers import (
 )
 from app.models.travel.stay import StayUnit, StayAmenity
 from app.models.travel.providers import TravelAgency, TravelAgencyStaff
+from app.models.travel.location import Location
 from app.models.user.profile import Profile
 from app.schemas.provider.cab import DriverPublic
 from sqlalchemy import func
@@ -58,6 +59,15 @@ def authenticate(*, session: Session, phone_number: str, password: str) -> User 
     if not verify_password(password, db_user.hashed_password):
         return None
     return db_user
+
+
+def create_location(*, session: Session, latitude: float, longitude: float) -> Location:
+    """Create a new location record with the given coordinates."""
+    location = Location(latitude=latitude, longitude=longitude)
+    session.add(location)
+    session.commit()
+    session.refresh(location)
+    return location
 
 
 def create_service_provider(*, session: Session, provider: dict | ServiceProvider) -> ServiceProvider:

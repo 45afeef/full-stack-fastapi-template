@@ -166,6 +166,8 @@ class TestProviderToUnitWorkflow:
             "provider_name": "Test Hotel",
             "owner_id": str(user.id),
             "created_by": str(user.id),
+            "latitude": 40.7128,  # New York latitude
+            "longitude": -74.0060,  # New York longitude
         }
 
         r = client.post(
@@ -265,6 +267,8 @@ class TestComplexWorkflowWithMultipleEntities:
                 "provider_name": f"Hotel {i+1}",
                 "owner_id": str(user_data["user"].id),
                 "created_by": str(user_data["user"].id),
+                "latitude": 40.7128,  # New York latitude
+                "longitude": -74.0060,  # New York longitude
             }
 
             r = client.post(
@@ -366,6 +370,8 @@ class TestComplexWorkflowWithMultipleEntities:
             "provider_name": "Test Hotel",
             "owner_id": str(user.id),
             "created_by": str(user.id),
+            "latitude": 40.7128,  # New York latitude
+            "longitude": -74.0060,  # New York longitude
         }
         r = client.post(
             f"{settings.API_V1_STR}/providers",

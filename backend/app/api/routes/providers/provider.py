@@ -29,6 +29,8 @@ def create_provider(*, session: SessionDep, provider_in: ProviderCreate) -> Any:
     Service provider can be any of the follwoing two
     1. Cab Service Provider
     2. Stay Service Provider
+    
+    Requires latitude and longitude to create a location.
     """
     # validate users
     create_by_user = session.get(User, provider_in.created_by)
@@ -38,8 +40,22 @@ def create_provider(*, session: SessionDep, provider_in: ProviderCreate) -> Any:
     if not owner_user:
         raise HTTPException(status_code=404, detail="User not found for owner_id")
     
-    # validation completes now create the service provider
-    sp = ServiceProvider(**provider_in.model_dump())
+    # Create location with latitude and longitude
+    location = crud.create_location(
+        session=session,
+        latitude=provider_in.latitude,
+        longitude=provider_in.longitude,
+    )
+    
+    # Prepare provider data with location_id
+    provider_data = provider_in.model_dump()
+    provider_data["location_id"] = location.id
+    # Remove latitude and longitude from provider_data as they're not provider fields
+    provider_data.pop("latitude", None)
+    provider_data.pop("longitude", None)
+    
+    # Create the service provider
+    sp = ServiceProvider(**provider_data)
     provider = crud.create_service_provider(session=session, provider=sp)
     
     if provider_in.provider_type == "CAB":

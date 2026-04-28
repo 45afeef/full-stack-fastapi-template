@@ -19,6 +19,8 @@ def create_provider_and_cab(client: TestClient, superuser_headers: dict[str, str
         "provider_name": "Query Cab Provider",
         "owner_id": str(owner_user.id),
         "created_by": str(owner_user.id),
+        "latitude": 40.7128,  # New York latitude
+        "longitude": -74.0060,  # New York longitude
     }
     r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_headers, json=provider_data)
     assert r.status_code == 201
@@ -49,6 +51,8 @@ def create_provider_and_driver(client: TestClient, superuser_headers: dict[str, 
         "provider_name": "Query Driver Provider",
         "owner_id": str(owner_user.id),
         "created_by": str(owner_user.id),
+        "latitude": 40.7128,  # New York latitude
+        "longitude": -74.0060,  # New York longitude
     }
     r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_headers, json=provider_data)
     assert r.status_code == 201
@@ -79,19 +83,14 @@ def create_stay_provider_with_unit(
         amenity=None, 
         room_count=1
     ):
-    # create a Location directly in DB and then a provider referencing it
-    from app.models.travel.location import Location
-    loc = Location(id=uuid.uuid4(), latitude=float(lat), longitude=float(lon))
-    db.add(loc)
-    db.commit()
-    db.refresh(loc)
 
     provider_data = {
         "provider_type": ServiceProviderType.STAY,
         "provider_name": "Query Stay Provider",
         "owner_id": str(owner_user.id),
         "created_by": str(owner_user.id),
-        "location_id": str(loc.id),
+        "latitude": lat,
+        "longitude": lon,
         "room_count": room_count,
     }
     r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_headers, json=provider_data)
@@ -116,7 +115,7 @@ def create_stay_provider_with_unit(
         )
         assert r.status_code == 200
 
-    return provider, unit, loc
+    return provider, unit
 
 class TestQueryEndpoints:
     def test_query_cabs_success_and_invalid(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
@@ -219,7 +218,7 @@ class TestQueryEndpoints:
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         
-        provider, unit, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=10.0, lon=10.0, room_rate=150, amenity="pool")
+        provider, unit = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=10.0, lon=10.0, room_rate=150, amenity="pool")
         # unauthenticated request -> 401
         r = client.get(f"{settings.API_V1_STR}/query/stay-units-near?lat=10.0&lon=10.0")
         assert r.status_code == 401
@@ -290,7 +289,7 @@ class TestQueryEndpoints:
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
         # Unit 1: North location, high price, wifi + ac amenities
-        provider1, unit1, _ = create_stay_provider_with_unit(
+        provider1, unit1 = create_stay_provider_with_unit(
             client,
             superuser_token_headers,
             db,
@@ -313,7 +312,7 @@ class TestQueryEndpoints:
         assert r.json()["amenity"] == "ac"
 
         # Unit 2: South location, low price, pool + gym amenities
-        provider2, unit2, _ = create_stay_provider_with_unit(
+        provider2, unit2 = create_stay_provider_with_unit(
             client,
             superuser_token_headers,
             db,
@@ -433,7 +432,7 @@ class TestQueryEndpoints:
 
         # Test Case 8: room_count filter
         # Create a third provider with room_count=2
-        provider3, unit3, _ = create_stay_provider_with_unit(
+        provider3, unit3 = create_stay_provider_with_unit(
             client,
             superuser_token_headers,
             db,
@@ -483,7 +482,7 @@ class TestQueryEndpoints:
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        provider, unit, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=0.0, lon=0.0, room_rate=50, amenity="wifi")
+        provider, unit = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=0.0, lon=0.0, room_rate=50, amenity="wifi")
 
         malicious = "'; DROP TABLE stayunit; --"
         r = client.get(f"{settings.API_V1_STR}/query/stay-units-near?lat=0.0&lon=0.0&amenity={malicious}", headers=superuser_token_headers)
@@ -512,21 +511,14 @@ class TestQueryEndpoints:
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-
-        # Create location for provider
-        from app.models.travel.location import Location
-        loc = Location(id=uuid.uuid4(), latitude=10.0, longitude=10.0)
-        db.add(loc)
-        db.commit()
-        db.refresh(loc)
-
         # Create provider
         provider_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Pax Count Test Provider",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
-            "location_id": str(loc.id),
+            "latitude": 10.0,
+            "longitude": 10.0,
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
         assert r.status_code == 201
@@ -623,7 +615,7 @@ class TestQueryEndpoints:
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
         # Create provider with 5 units
-        provider, _, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=0.0, lon=0.0, room_rate=100)
+        provider, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=0.0, lon=0.0, room_rate=100)
         provider_id = provider["id"]
 
         # Create 4 more units (we already have 1 from create_stay_provider_with_unit)
@@ -703,19 +695,13 @@ class TestQueryEndpoints:
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
-        # Create provider
-        from app.models.travel.location import Location
-        loc = Location(id=uuid.uuid4(), latitude=0.0, longitude=0.0)
-        db.add(loc)
-        db.commit()
-        db.refresh(loc)
-
         provider_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Price Test Provider",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
-            "location_id": str(loc.id),
+            "latitude": 0.0,
+            "longitude": 0.0,
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
         assert r.status_code == 201
@@ -814,18 +800,13 @@ class TestQueryEndpoints:
         provider_ids = []
         
         for idx, (lat, lon) in enumerate(locations):
-            from app.models.travel.location import Location
-            loc = Location(id=uuid.uuid4(), latitude=float(lat), longitude=float(lon))
-            db.add(loc)
-            db.commit()
-            db.refresh(loc)
-
             provider_data = {
                 "provider_type": ServiceProviderType.STAY,
                 "provider_name": f"Distance Test Provider {idx + 1}",
                 "owner_id": str(owner.id),
                 "created_by": str(owner.id),
-                "location_id": str(loc.id),
+                "latitude": lat,
+                "longitude": lon,
             }
             r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
             assert r.status_code == 201
@@ -898,18 +879,13 @@ class TestQueryEndpoints:
         ]
 
         for idx, (lat, lon, name) in enumerate(locations_data):
-            from app.models.travel.location import Location
-            loc = Location(id=uuid.uuid4(), latitude=float(lat), longitude=float(lon))
-            db.add(loc)
-            db.commit()
-            db.refresh(loc)
-
             provider_data = {
                 "provider_type": ServiceProviderType.STAY,
                 "provider_name": f"Radius Provider {idx + 1}",
                 "owner_id": str(owner.id),
                 "created_by": str(owner.id),
-                "location_id": str(loc.id),
+                "latitude": lat,
+                "longitude": lon,
             }
             r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
             assert r.status_code == 201
@@ -980,20 +956,14 @@ class TestQueryEndpoints:
         ]
 
         for idx, (lat, lon, vehicle_type) in enumerate(cab_configs):
-            # Create location
-            from app.models.travel.location import Location
-            loc = Location(id=uuid.uuid4(), latitude=float(lat), longitude=float(lon))
-            db.add(loc)
-            db.commit()
-            db.refresh(loc)
-
             # Create provider
             provider_data = {
                 "provider_type": ServiceProviderType.CAB,
                 "provider_name": f"Cab Provider {idx + 1}",
                 "owner_id": str(owner.id),
                 "created_by": str(owner.id),
-                "location_id": str(loc.id),
+                "latitude": lat,
+                "longitude": lon,
             }
             r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
             assert r.status_code == 201
@@ -1072,7 +1042,7 @@ class TestQueryEndpoints:
 
         # Create multiple providers with units
         for i in range(3):
-            provider, _, _ = create_stay_provider_with_unit(
+            provider, _ = create_stay_provider_with_unit(
                 client,
                 superuser_token_headers,
                 db,
@@ -1103,7 +1073,7 @@ class TestQueryEndpoints:
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
-        provider, _, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner)
+        provider, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner)
         provider_id = provider["id"]
 
         # Test Case 1: Invalid pax_count (0 should be rejected, min is 1)
@@ -1157,7 +1127,7 @@ class TestQueryEndpoints:
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         
         # Create a stay provider with a unit
-        provider, _, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=10.0, lon=10.0)
+        provider, _ = create_stay_provider_with_unit(client, superuser_token_headers, db, owner, lat=10.0, lon=10.0)
         
         # Test Case 1: Unauthenticated request → 401
         r = client.get(f"{settings.API_V1_STR}/query/stay-providers")
@@ -1191,26 +1161,26 @@ class TestQueryEndpoints:
 
     def test_query_stay_providers_by_location(self, client: TestClient, superuser_token_headers: dict[str, str], db: Session):
         """
-        Test filtering stay providers by location_id.
+        Test filtering stay providers by location.
         
         Scenario:
         - Create 2 locations (Delhi, Mumbai)
         - Create providers in both locations
-        - Query by each location_id
+        - Query by each location
         """
         phone_number = random_phone()
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         
         # Create provider in Delhi
-        provider_delhi, _, loc_delhi = create_stay_provider_with_unit(
+        provider_delhi, _ = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=28.7041, lon=77.1025, room_rate=100, amenity="wifi"
         )
         provider_delhi_id = provider_delhi["id"]
         
         # Create provider in Mumbai
-        provider_mumbai, _, loc_mumbai = create_stay_provider_with_unit(
+        provider_mumbai, _ = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=19.0760, lon=72.8777, room_rate=150, amenity="pool"
         )
@@ -1221,7 +1191,7 @@ class TestQueryEndpoints:
         assert r.status_code == 200
         assert r.json()["count"] >= 2, "Should find both providers"
         
-        # Test Case 2: Query by Delhi location_id
+        # Test Case 2: Query by Delhi
         r = client.get(
             f"{settings.API_V1_STR}/query/stay-providers?location=delhi&radius_km=20",
             headers=superuser_token_headers
@@ -1231,7 +1201,7 @@ class TestQueryEndpoints:
         assert data["count"] == 1, "Should find only Delhi provider"
         assert data["data"][0]["id"] == provider_delhi_id
         
-        # Test Case 3: Query by Mumbai location_id
+        # Test Case 3: Query by Mumbai
         r = client.get(
             f"{settings.API_V1_STR}/query/stay-providers?location=mumbai&radius_km=5",
             headers=superuser_token_headers
@@ -1277,7 +1247,7 @@ class TestQueryEndpoints:
         base_lat, base_lon = 28.7041, 77.1025
 
         # Provider 1: wifi + ac
-        prov1, unit1, _ = create_stay_provider_with_unit(
+        prov1, unit1 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat, lon=base_lon, room_rate=100, amenity="wifi"
         )
@@ -1291,7 +1261,7 @@ class TestQueryEndpoints:
         assert r.status_code == 200
 
         # Provider 2: pool + gym
-        prov2, unit2, _ = create_stay_provider_with_unit(
+        prov2, unit2 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat + 0.01, lon=base_lon + 0.01, room_rate=150, amenity="pool"
         )
@@ -1305,7 +1275,7 @@ class TestQueryEndpoints:
         assert r.status_code == 200
 
         # Provider 3: wifi + pool + parking
-        prov3, unit3, _ = create_stay_provider_with_unit(
+        prov3, unit3 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat + 0.02, lon=base_lon + 0.02, room_rate=200, amenity="wifi"
         )
@@ -1384,15 +1354,15 @@ class TestQueryEndpoints:
 
         base_lat, base_lon = 28.7041, 77.1025
 
-        prov_a, _, _ = create_stay_provider_with_unit(
+        prov_a, _ = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat, lon=base_lon, room_rate=100
         )
-        prov_b, _, _ = create_stay_provider_with_unit(
+        prov_b, _ = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat + 0.01, lon=base_lon + 0.01, room_rate=200
         )
-        prov_c, _, _ = create_stay_provider_with_unit(
+        prov_c, _ = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat + 0.02, lon=base_lon + 0.02, room_rate=300
         )
@@ -1477,17 +1447,13 @@ class TestQueryEndpoints:
         # Provider 1 (max = 2)
         # single unit, max_occupancy=2
         # ------------------------
-        loc1 = Location(id=uuid.uuid4(), latitude=base_lat, longitude=base_lon)
-        db.add(loc1)
-        db.commit()
-        db.refresh(loc1)
-
         prov1_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Pax Provider 1",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
-            "location_id": str(loc1.id),
+            "latitude": base_lat,
+            "longitude": base_lon,
             "property_type": "hotel",
             "room_count": 1,
             "optimal_occupancy": 2,
@@ -1509,17 +1475,13 @@ class TestQueryEndpoints:
         # Provider 2 (3 + 2 units, provider max = 6)
         # two units, total capacity 5 (3 + 2), provider max_occupancy = 6
         # ------------------------
-        loc2 = Location(id=uuid.uuid4(), latitude=base_lat + 0.01, longitude=base_lon + 0.01)
-        db.add(loc2)
-        db.commit()
-        db.refresh(loc2)
-
         prov2_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Pax Provider 2",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
-            "location_id": str(loc2.id),
+            "latitude": base_lat + 0.01,
+            "longitude": base_lon + 0.01,
             "property_type": "apartment",
             "room_count": 2,
             "optimal_occupancy": 5,
@@ -1542,17 +1504,13 @@ class TestQueryEndpoints:
         # Provider 3 (max = 6)
         # single unit, max_occupancy=6
         # ------------------------
-        loc3 = Location(id=uuid.uuid4(), latitude=base_lat + 0.02, longitude=base_lon + 0.02)
-        db.add(loc3)
-        db.commit()
-        db.refresh(loc3)
-
         prov3_data = {
             "provider_type": ServiceProviderType.STAY,
             "provider_name": "Pax Provider 3",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
-            "location_id": str(loc3.id),
+            "latitude": base_lat + 0.02,
+            "longitude": base_lon + 0.02,
             "property_type": "villa",
             "room_count": 1,
             "optimal_occupancy": 6,
@@ -1620,21 +1578,21 @@ class TestQueryEndpoints:
         base_lat, base_lon = 28.7041, 77.1025
 
         # Provider 1: 2 rooms
-        prov1, unit1, loc_a = create_stay_provider_with_unit(
+        prov1, unit1 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat, lon=base_lon, room_rate=100, amenity="wifi", room_count=2
         )
         prov1_id = prov1["id"]
 
         # Provider 2: 3 rooms
-        prov2, unit2, loc_b = create_stay_provider_with_unit(
+        prov2, unit2 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat + 0.01, lon=base_lon + 0.01, room_rate=150, amenity="pool", room_count=3
         )
         prov2_id = prov2["id"]
 
         # Provider 3: 4 rooms
-        prov3, unit3, loc_c = create_stay_provider_with_unit(
+        prov3, unit3 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat + 0.02, lon=base_lon + 0.02, room_rate=200, amenity="wifi", room_count=4
         )
@@ -1703,14 +1661,14 @@ class TestQueryEndpoints:
         base_lat_b, base_lon_b = 19.0760, 72.8777
 
         # Provider 1: location A, wifi, price 100
-        prov1, unit1, loc_a = create_stay_provider_with_unit(
+        prov1, unit1 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat_a, lon=base_lon_a, room_rate=100, amenity="wifi"
         )
         prov1_id = prov1["id"]
 
         # Provider 2: location B, pool, price 150
-        prov2, unit2, loc_b = create_stay_provider_with_unit(
+        prov2, unit2 = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat_b, lon=base_lon_b, room_rate=150, amenity="pool"
         )
@@ -1725,7 +1683,8 @@ class TestQueryEndpoints:
             "provider_name": "Query Stay Provider 3",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
-            "location_id": str(loc_a.id),  # Reuse location A from Provider 1
+            "latitude": base_lat_a + 0.001,  # very close to location A
+            "longitude": base_lon_a + 0.001,
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=prov3_data)
         assert r.status_code == 201
@@ -1818,7 +1777,7 @@ class TestQueryEndpoints:
         provider_ids = []
 
         for i in range(5):
-            provider, unit, _ = create_stay_provider_with_unit(
+            provider, unit = create_stay_provider_with_unit(
                 client, superuser_token_headers, db, owner,
                 lat=base_lat + (i * 0.01),  # keep within radius
                 lon=base_lon + (i * 0.01),
@@ -1956,7 +1915,7 @@ class TestQueryEndpoints:
         # Base location (Delhi cluster)
         base_lat, base_lon = 28.7041, 77.1025
         
-        prov, unit, _ = create_stay_provider_with_unit(
+        prov, unit = create_stay_provider_with_unit(
             client, superuser_token_headers, db, owner,
             lat=base_lat, lon=base_lon, room_rate=100, amenity="wifi"
         )
@@ -2026,13 +1985,6 @@ class TestQueryEndpoints:
         password = random_lower_string()
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
 
-        # Create location for providers
-        from app.models.travel.location import Location
-        loc = Location(id=uuid.uuid4(), latitude=10.0, longitude=10.0)
-        db.add(loc)
-        db.commit()
-        db.refresh(loc)
-
         # Cab configurations with different capacities and rates
         cab_configs = [
             {"capacity": 4, "minimum_rate": 100, "per_km_rate": 15, "km_for_minimum_rate": 5, "vehicle_number": "CAB001"},
@@ -2045,7 +1997,8 @@ class TestQueryEndpoints:
             "provider_name": "Capacity Rate Test Provider",
             "owner_id": str(owner.id),
             "created_by": str(owner.id),
-            "location_id": str(loc.id),
+            "latitude": 28.7041,
+            "longitude": 77.1025,
         }
         r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
         assert r.status_code == 201
@@ -2136,13 +2089,6 @@ class TestQueryEndpoints:
         owner = crud.create_user(session=db, user_create=UserCreate(phone_number=phone_number, password=password))
         expected_drivers = []
 
-        # Create location for providers
-        from app.models.travel.location import Location
-        loc = Location(id=uuid.uuid4(), latitude=10.0, longitude=10.0)
-        db.add(loc)
-        db.commit()
-        db.refresh(loc)
-
         # Driver and cab configurations
         driver_configs = [
             {"capacity": 4, "vehicle_number": "DRV001", "driver_name": "Driver A"},
@@ -2157,7 +2103,8 @@ class TestQueryEndpoints:
                 "provider_name": f"Provider {config['driver_name']}",
                 "owner_id": str(owner.id),
                 "created_by": str(owner.id),
-                "location_id": str(loc.id),
+                "latitude": 28.7041,
+                "longitude": 77.1025,
             }
             r = client.post(f"{settings.API_V1_STR}/providers/", headers=superuser_token_headers, json=provider_data)
             assert r.status_code == 201

@@ -8,7 +8,8 @@ from app.models.travel.enums import ServiceProviderType
 # --------- Base Provider Create Models ---------
 class BaseProviderCreate(SQLModel):
     provider_name: str
-    location_id: Optional[UUID] = None
+    latitude: float  # Mandatory
+    longitude: float  # Mandatory
     owner_id: UUID
     created_by: UUID
 
