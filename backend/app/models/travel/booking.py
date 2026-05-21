@@ -9,7 +9,6 @@ from .enums import BookingStatus, RoomType
 
 class Booking(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    traveler_id: UUID = Field(foreign_key="profile.id")
     travel_agency_id: Optional[UUID] = Field(default=None, foreign_key="travelagency.id")
     travel_agency_staff_id: Optional[UUID] = Field(default=None, foreign_key="travelagencystaff.id")
     enquiry_id: Optional[UUID] = Field(default=None, foreign_key="enquirydetails.id")

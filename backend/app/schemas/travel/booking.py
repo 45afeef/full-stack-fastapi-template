@@ -11,7 +11,7 @@ class BookingTravellerCreate(SQLModel):
 
 
 class BookingCabCreate(SQLModel):
-    cab_id: UUID
+    cab_id: Optional[UUID] = None
     cab_provider_id: Optional[UUID] = None
     pickup_time: Optional[datetime] = None
     pickup_location: Optional[str] = None
@@ -24,7 +24,7 @@ class BookingCabCreate(SQLModel):
 
 
 class BookingStayCreate(SQLModel):
-    stayunit_id: UUID
+    stayunit_id: Optional[UUID] = None
     stay_provider_id: Optional[UUID] = None
     check_in: Optional[datetime] = None
     check_out: Optional[datetime] = None
@@ -34,7 +34,6 @@ class BookingStayCreate(SQLModel):
 
 
 class BookingCreate(SQLModel):
-    traveler_id: UUID
     booking_date: Optional[datetime] = None
     status: Optional[BookingStatus] = None
     total_amount: Optional[int] = None
@@ -45,11 +44,8 @@ class BookingCreate(SQLModel):
     stays: Optional[list[BookingStayCreate]] = None
 
 
-class BookingUpdate(SQLModel):
-    booking_date: Optional[datetime] = None
-    status: Optional[BookingStatus] = None
-    total_amount: Optional[int] = None
-
+class BookingUpdate(BookingCabCreate):
+    pass
 
 __all__ = [
     "BookingCreate",

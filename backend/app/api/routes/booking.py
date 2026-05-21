@@ -64,14 +64,6 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
     if "id" not in payload or not payload.get("id"):
         payload["id"] = uuid.uuid4()
 
-    # validate traveler exists
-    tr_id = payload.get("traveler_id")
-    if not tr_id:
-        raise HTTPException(status_code=422, detail="traveler_id is required")
-    profile = session.get(Profile, tr_id)
-    if not profile:
-        raise HTTPException(status_code=404, detail="Traveler profile not found")
-
     # create in-session (avoid starting a nested transaction; the session may already be transactional in tests)
     try:
         booking_obj = Booking(**payload)
@@ -221,7 +213,7 @@ def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: Se
 
     update_data = booking_in.model_dump(exclude_unset=True)
     # disallow changing ownership fields
-    for k in ("id", "travel_agency_id", "travel_agency_staff_id", "traveler_id"):
+    for k in ("id", "travel_agency_id", "travel_agency_staff_id"):
         update_data.pop(k, None)
 
     booking.sqlmodel_update(update_data)
