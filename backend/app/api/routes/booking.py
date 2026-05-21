@@ -60,10 +60,6 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
         payload["travel_agency_id"] = str(staff_rec.travel_agency_id)
         payload["travel_agency_staff_id"] = str(staff_rec.id)
 
-    # ensure booking id
-    if "id" not in payload or not payload.get("id"):
-        payload["id"] = uuid.uuid4()
-
     # create in-session (avoid starting a nested transaction; the session may already be transactional in tests)
     try:
         booking_obj = Booking(**payload)
