@@ -18,7 +18,7 @@ class BookingCabCreate(SQLModel):
     drop_time: Optional[datetime] = None
     drop_location: Optional[str] = None
     driver_id: Optional[UUID] = None
-    rate: Optional[int] = None
+    rate: Optional[int] = None # This is the cost to the agency, not the amount charged to the customer
     status: Optional[BookingStatus] = None
     notes: Optional[str] = None
 
@@ -29,14 +29,14 @@ class BookingStayCreate(SQLModel):
     check_in: Optional[datetime] = None
     check_out: Optional[datetime] = None
     room_type: Optional[str] = None
-    rate: Optional[int] = None
+    rate: Optional[int] = None # This is the cost to the agency, not the amount charged to the customer
     status: Optional[BookingStatus] = None
 
 
 class BookingCreate(SQLModel):
     booking_date: Optional[datetime] = None
     status: Optional[BookingStatus] = None
-    total_amount: Optional[int] = None
+    total_amount: Optional[int] = None # This is charged to the customer, (not the agency cost)
     travel_agency_id: Optional[UUID] = None
     # nested sub-resources
     travellers: Optional[list[BookingTravellerCreate]] = None

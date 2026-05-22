@@ -75,7 +75,7 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
             if not p:
                 session.rollback()
                 raise HTTPException(status_code=404, detail=f"Traveller profile {traveller_id} not found")
-            bt = BookingTraveller(id=uuid.uuid4(), booking_id=booking_obj.id, traveller_id=traveller_id)
+            bt = BookingTraveller(booking_id=booking_obj.id, traveller_id=traveller_id)
             session.add(bt)
 
         # create cab links
@@ -86,7 +86,6 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
                 session.rollback()
                 raise HTTPException(status_code=404, detail=f"Cab {cab_id} not found")
             bc = BookingCab(
-                id=uuid.uuid4(),
                 booking_id=booking_obj.id,
                 cab_id=cab_id,
                 cab_provider_id=(c.get("cab_provider_id") if isinstance(c, dict) else c.cab_provider_id),
@@ -109,7 +108,6 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
                 session.rollback()
                 raise HTTPException(status_code=404, detail=f"Stay unit {stayunit_id} not found")
             bs = BookingStay(
-                id=uuid.uuid4(),
                 booking_id=booking_obj.id,
                 stayunit_id=stayunit_id,
                 stay_provider_id=(s.get("stay_provider_id") if isinstance(s, dict) else s.stay_provider_id),
