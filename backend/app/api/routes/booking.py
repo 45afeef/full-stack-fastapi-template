@@ -25,9 +25,16 @@ def _get_staff_records(session: Session, user_id: uuid.UUID) -> list[TravelAgenc
 
 @router.post("/", dependencies=[Depends(get_current_user)], response_model=Booking)
 def create_booking(session: SessionDep, booking_in: BookingCreate, current_user: CurrentUser) -> Any:
-    """Create a booking. Only agency staff may create bookings. This operation creates Booking and related
-    BookingTraveller/BookingCab/BookingStay rows transactionally.
     """
+    Create a booking. Only agency staff may create bookings. This operation creates Booking and related
+    BookingTraveller/BookingCab/BookingStay rows transactionally.
+
+    **Authorization**: Only agency staff can create bookings. The booking will be associated with the staff user's agency and staff record.
+
+    """
+
+    # Verify Authorization:
+    # Verifiy the user is staff for at least one agency (unless superuser) - we need this to determine which agency to attach the booking to and to enforce permissions. We require staff status to create a booking because we need to associate the booking with an agency, and only staff are associated with agencies.
     # require staff
     staff_records = _get_staff_records(session, current_user.id)
     if not staff_records and not current_user.is_superuser:
@@ -85,10 +92,21 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
             if not cab_obj:
                 session.rollback()
                 raise HTTPException(status_code=404, detail=f"Cab {cab_id} not found")
+
+            cab_provider_id = (
+                c["cab_provider_id"] if isinstance(c, dict) and c.get("cab_provider_id") is not None
+                else getattr(c, "cab_provider_id", None)
+            )
+            if not cab_provider_id:
+                cab_provider_id = getattr(cab_obj, "cab_provider_id", None) or getattr(cab_obj, "provider_id", None)
+            if not cab_provider_id:
+                session.rollback()
+                raise HTTPException(status_code=400, detail=f"Cab provider id for cab {cab_id} is required")
+
             bc = BookingCab(
                 booking_id=booking_obj.id,
                 cab_id=cab_id,
-                cab_provider_id=(c.get("cab_provider_id") if isinstance(c, dict) else c.cab_provider_id),
+                cab_provider_id=cab_provider_id,
                 pickup_time=(c.get("pickup_time") if isinstance(c, dict) else c.pickup_time),
                 pickup_location=(c.get("pickup_location") if isinstance(c, dict) else c.pickup_location),
                 drop_time=(c.get("drop_time") if isinstance(c, dict) else c.drop_time),
@@ -102,20 +120,16 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
 
         # create stay links
         for s in stays:
-            stayunit_id = s["stayunit_id"] if isinstance(s, dict) else s.stayunit_id
-            stayunit = session.get(StayUnit, stayunit_id)
-            if not stayunit:
-                session.rollback()
-                raise HTTPException(status_code=404, detail=f"Stay unit {stayunit_id} not found")
+            stayunit_id = s.get("stayunit_id") if isinstance(s, dict) else getattr(s, "stayunit_id", None)
             bs = BookingStay(
                 booking_id=booking_obj.id,
                 stayunit_id=stayunit_id,
-                stay_provider_id=(s.get("stay_provider_id") if isinstance(s, dict) else s.stay_provider_id),
-                check_in=(s.get("check_in") if isinstance(s, dict) else s.check_in),
-                check_out=(s.get("check_out") if isinstance(s, dict) else s.check_out),
-                room_type=(s.get("room_type") if isinstance(s, dict) else s.room_type),
-                rate=(s.get("rate") if isinstance(s, dict) else s.rate),
-                status=(s.get("status") if isinstance(s, dict) else s.status),
+                stay_provider_id=(s.get("stay_provider_id") if isinstance(s, dict) else getattr(s, "stay_provider_id", None)),
+                check_in=(s.get("check_in") if isinstance(s, dict) else getattr(s, "check_in", None)),
+                check_out=(s.get("check_out") if isinstance(s, dict) else getattr(s, "check_out", None)),
+                room_type=(s.get("room_type") if isinstance(s, dict) else getattr(s, "room_type", None)),
+                rate=(s.get("rate") if isinstance(s, dict) else getattr(s, "rate", None)),
+                status=(s.get("status") if isinstance(s, dict) else getattr(s, "status", None)),
             )
             session.add(bs)
 

@@ -4,10 +4,34 @@ from datetime import datetime
 
 from app.models.travel.enums import BookingStatus
 from sqlmodel import SQLModel
+from pydantic import model_validator
 
 
 class BookingTravellerCreate(SQLModel):
-    traveller_id: UUID
+    traveller_id: Optional[UUID] = None
+    traveller_name: Optional[str] = None
+    traveller_phone: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_traveller_input(self):
+        has_id = self.traveller_id is not None
+
+        has_new_traveller_data = (
+            self.traveller_name is not None and
+            self.traveller_phone is not None
+        )
+
+        if not has_id and not has_new_traveller_data:
+            raise ValueError(
+                "Provide either traveller_id OR both traveller_name and traveller_phone"
+            )
+
+        if has_id and has_new_traveller_data:
+            raise ValueError(
+                "Provide either traveller_id OR traveller_name/traveller_phone, not both"
+            )
+
+        return self
 
 
 class BookingCabCreate(SQLModel):
@@ -20,7 +44,6 @@ class BookingCabCreate(SQLModel):
     driver_id: Optional[UUID] = None
     rate: Optional[int] = None # This is the cost to the agency, not the amount charged to the customer
     status: Optional[BookingStatus] = None
-    notes: Optional[str] = None
 
 
 class BookingStayCreate(SQLModel):
@@ -46,6 +69,7 @@ class BookingCreate(SQLModel):
 
 class BookingUpdate(BookingCabCreate):
     pass
+
 
 __all__ = [
     "BookingCreate",

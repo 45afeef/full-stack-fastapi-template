@@ -65,7 +65,7 @@ class BookingCab(SQLModel, table=True):
 
 class BookingStay(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    stayunit_id: UUID = Field(foreign_key="stayunit.id")
+    stayunit_id: UUID = Field(default=None,foreign_key="stayunit.id")
     booking_id: UUID = Field(foreign_key="booking.id")
     stay_provider_id: UUID = Field(foreign_key="stayserviceprovider.provider_id")
     check_in: Optional[datetime] = Field(default=None)
