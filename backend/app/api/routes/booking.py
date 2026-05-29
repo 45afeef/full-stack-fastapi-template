@@ -2,17 +2,20 @@
 import uuid
 from typing import Any
 
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select, Session
+from sqlalchemy.orm import selectinload, load_only
 
+from app.booking_crud import booking_details_loader, serialize_booking
 from app.api.deps import SessionDep, get_current_user, CurrentUser
 from app.api.routes.agency import _is_agency_owner
 from app.models.travel.booking import Booking, BookingTraveller, BookingCab, BookingStay
-from app.models.travel.providers import TravelAgencyStaff, TravelAgency, CabServiceProvider, StayServiceProvider
-from app.models.travel.cab import Cab
+from app.models.travel.providers import TravelAgencyStaff, TravelAgency, CabServiceProvider
+from app.models.travel.cab import Cab, Driver
 from app.models.travel.stay import StayUnit
 from app.models.user.profile import Profile
-from app.schemas.travel.booking import BookingCreate, BookingUpdate
+from app.schemas.travel.booking import BookingCreate, BookingUpdate, BookingRead
 
 
 router = APIRouter(prefix="/booking", tags=["booking"])
@@ -23,11 +26,11 @@ def _get_staff_records(session: Session, user_id: uuid.UUID) -> list[TravelAgenc
     return session.exec(statement).all()
 
 
-@router.post("/", dependencies=[Depends(get_current_user)], response_model=Booking)
+@router.post("/", dependencies=[Depends(get_current_user)], response_model=BookingRead)
 def create_booking(session: SessionDep, booking_in: BookingCreate, current_user: CurrentUser) -> Any:
     """
     Create a booking. Only agency staff may create bookings. This operation creates Booking and related
-    BookingTraveller/BookingCab/BookingStay rows transactionally.
+    BookingTraveller/BookingCab/BookingStay rows transactionally. Returns complete booking with all nested data.
 
     **Authorization**: Only agency staff can create bookings. The booking will be associated with the staff user's agency and staff record.
 
@@ -142,45 +145,96 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
         session.rollback()
         raise
 
-    # refresh and return
+    # refresh and reload all nested data
     session.refresh(booking_obj)
-    return booking_obj
+    # Load nested relationships
+    stmt = (select(Booking)
+        .where(Booking.id == booking_obj.id)
+        .options(
+            selectinload(Booking.travellers).selectinload(BookingTraveller.traveller),
+            selectinload(Booking.cabs).selectinload(BookingCab.cab),
+            selectinload(Booking.cabs).selectinload(BookingCab.driver).selectinload(Driver.profile),
+            selectinload(Booking.stays).selectinload(BookingStay.stayunit).selectinload(StayUnit.provider)
+        )
+    )
+    return session.exec(stmt).first()
 
 
-@router.get("/", dependencies=[Depends(get_current_user)], response_model=list[Booking])
+@router.get("/")
 def list_bookings(session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100) -> Any:
-    """List bookings with permission rules:
+    """
+    List bookings with all nested information (travellers, cabs, stays) with permission rules:
     - superuser: all
     - agency owner: all bookings for agencies they own
     - agency staff: only bookings created by that staff user (travel_agency_staff_id)
     """
+
+    stmt = select(Booking)
+    
     # superuser: return all
     if current_user.is_superuser:
-        stmt = select(Booking).offset(skip).limit(limit)
-        return session.exec(stmt).all()
+        pass
 
-    # check if agency owner for any agency
-    # find agencies owned by user
-    statement = select(TravelAgency).where(TravelAgency.created_by == current_user.id)
-    owned_agencies = session.exec(statement).all()
-    if owned_agencies:
-        agency_ids = [a.id for a in owned_agencies]
-        stmt = select(Booking).where(Booking.travel_agency_id.in_(agency_ids)).offset(skip).limit(limit)
-        return session.exec(stmt).all()
+    else:
+        owned_agencies = session.exec(
+            select(TravelAgency)
+            .where(TravelAgency.created_by == current_user.id)
+        ).all()
 
-    # otherwise must be staff and only see own bookings
-    staff_records = _get_staff_records(session, current_user.id)
-    if not staff_records:
-        raise HTTPException(status_code=403, detail="Not authorized to list bookings")
-    staff_ids = [s.id for s in staff_records]
-    stmt = select(Booking).where(Booking.travel_agency_staff_id.in_(staff_ids)).offset(skip).limit(limit)
-    return session.exec(stmt).all()
+        if owned_agencies:
+            agency_ids = [a.id for a in owned_agencies]
+
+            stmt = stmt.where(
+                Booking.travel_agency_id.in_(agency_ids)
+            )
+
+        else:
+            staff_records = _get_staff_records(
+                session,
+                current_user.id
+            )
+
+            if not staff_records:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized",
+                )
+
+            stmt = stmt.where(
+                Booking.travel_agency_staff_id.in_(
+                    [s.id for s in staff_records]
+                )
+            )
+
+    stmt = (
+        booking_details_loader(stmt)
+        .offset(skip)
+        .limit(limit)
+        .order_by(Booking.booking_date.desc())
+    )
+
+    bookings = session.exec(stmt).all()
+
+    return [
+        serialize_booking(b)
+        for b in bookings
+    ]
 
 
-@router.get("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=Booking)
+@router.get("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=BookingRead)
 def get_booking(booking_id: uuid.UUID, session: SessionDep, current_user: CurrentUser) -> Any:
-    """Fetch a single booking according to permission rules."""
-    booking = session.get(Booking, booking_id)
+    """Fetch a single booking with all nested information according to permission rules."""
+    # Load booking with nested relationships
+    stmt = (select(Booking)
+        .where(Booking.id == booking_id)
+        .options(
+            selectinload(Booking.travellers).selectinload(BookingTraveller.traveller),
+            selectinload(Booking.cabs).selectinload(BookingCab.cab),
+            selectinload(Booking.cabs).selectinload(BookingCab.driver).selectinload(Driver.profile),
+            selectinload(Booking.stays).selectinload(BookingStay.stayunit)
+        )
+    )
+    booking = session.exec(stmt).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
@@ -203,9 +257,9 @@ def get_booking(booking_id: uuid.UUID, session: SessionDep, current_user: Curren
     raise HTTPException(status_code=403, detail="Not authorized to view this booking")
 
 
-@router.patch("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=Booking)
+@router.patch("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=BookingRead)
 def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: SessionDep, current_user: CurrentUser) -> Any:
-    """Update booking. Staff can update only their own bookings; superuser allowed to update any."""
+    """Update booking. Staff can update only their own bookings; superuser allowed to update any. Returns updated booking with all nested data."""
     booking = session.get(Booking, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -228,7 +282,18 @@ def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: Se
     session.add(booking)
     session.commit()
     session.refresh(booking)
-    return booking
+    
+    # Load nested relationships
+    stmt = (select(Booking)
+        .where(Booking.id == booking.id)
+        .options(
+            selectinload(Booking.travellers).selectinload(BookingTraveller.traveller),
+            selectinload(Booking.cabs).selectinload(BookingCab.cab),
+            selectinload(Booking.cabs).selectinload(BookingCab.driver).selectinload(Driver.profile),
+            selectinload(Booking.stays).selectinload(BookingStay.stayunit)
+        )
+    )
+    return session.exec(stmt).first()
 
 
 __all__ = ["router"]
