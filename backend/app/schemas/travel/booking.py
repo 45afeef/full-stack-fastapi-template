@@ -67,7 +67,7 @@ class BookingCreate(SQLModel):
     stays: Optional[list[BookingStayCreate]] = None
 
 
-class BookingUpdate(BookingCabCreate):
+class BookingUpdate(BookingCreate):
     pass
 
 

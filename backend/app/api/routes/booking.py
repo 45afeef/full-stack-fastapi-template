@@ -225,40 +225,69 @@ def list_bookings(session: SessionDep, current_user: CurrentUser, skip: int = 0,
     ]
 
 
-@router.get("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=BookingRead)
+@router.get("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=BookingResponse)
 def get_booking(booking_id: uuid.UUID, session: SessionDep, current_user: CurrentUser) -> Any:
     """Fetch a single booking with all nested information according to permission rules."""
-    # Load booking with nested relationships
-    stmt = (select(Booking)
-        .where(Booking.id == booking_id)
-        .options(
-            selectinload(Booking.travellers).selectinload(BookingTraveller.traveller),
-            selectinload(Booking.cabs).selectinload(BookingCab.cab),
-            selectinload(Booking.cabs).selectinload(BookingCab.driver).selectinload(Driver.profile),
-            selectinload(Booking.stays).selectinload(BookingStay.stayunit)
+
+    # First fetch only fields needed for authorization
+    booking_meta = session.exec(
+        select(
+            Booking.id,
+            Booking.travel_agency_id,
+            Booking.travel_agency_staff_id,
+        ).where(Booking.id == booking_id)
+    ).first()
+
+    if not booking_meta:
+        raise HTTPException(
+            # don't reveal that the booking doesn't exist vs. not authorized
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this booking",
         )
+
+    _, travel_agency_id, travel_agency_staff_id = booking_meta
+
+    # Superuser can access any booking
+    if not current_user.is_superuser:
+        authorized = False
+
+        # Agency owner
+        if travel_agency_id:
+            agency = session.get(TravelAgency, travel_agency_id)
+            if agency and _is_agency_owner(session, current_user, agency):
+                authorized = True
+
+        # Agency staff must be creator
+        if not authorized:
+            staff_records = _get_staff_records(session, current_user.id)
+            staff_ids = {s.id for s in staff_records}
+
+            if (
+                travel_agency_staff_id
+                and travel_agency_staff_id in staff_ids
+            ):
+                authorized = True
+
+        if not authorized:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this booking",
+            )
+
+    # Load full booking only after authorization succeeds
+    stmt = booking_details_loader(
+        select(Booking).where(Booking.id == booking_id)
     )
+
     booking = session.exec(stmt).first()
+
     if not booking:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found",
+        )
 
-    if current_user.is_superuser:
-        return booking
-
-    # agency owner?
-    agency = None
-    if booking.travel_agency_id:
-        agency = session.get(TravelAgency, booking.travel_agency_id)
-    if agency and _is_agency_owner(session, current_user, agency):
-        return booking
-
-    # agency staff: must be creator (travel_agency_staff_id)
-    staff_records = _get_staff_records(session, current_user.id)
-    staff_ids = {s.id for s in staff_records}
-    if booking.travel_agency_staff_id and booking.travel_agency_staff_id in staff_ids:
-        return booking
-
-    raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+    return serialize_booking(booking)
 
 
 @router.patch("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=BookingRead)
