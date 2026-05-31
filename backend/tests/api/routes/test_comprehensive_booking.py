@@ -43,7 +43,7 @@ class TestBookingFull:
 
         # Try to create booking with travel_agency_id set to agency_b.id (different agency)
         booking_payload = {
-            "booking_date": datetime.utcnow().isoformat(),
+            "booking_date": datetime.now().isoformat(),
             "total_amount": 500,
             "travel_agency_id": str(agency_b.id),
             "travellers": [{"traveller_id": str(profile.id)}],
@@ -70,7 +70,7 @@ class TestBookingFull:
         staff_user = crud.get_user_by_phone(session=db, phone_number=staff_phone)
         crud.assign_agency_staff(session=db, staff={"user_id": str(staff_user.id), "travel_agency_id": str(agency.id)})
 
-        payload = {}
+        payload = {"booking_date": "2027-01-01"}
         r = client.post(f"{settings.API_V1_STR}/booking", headers=staff_headers, json=payload)
         assert r.status_code == 200
 

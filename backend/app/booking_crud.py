@@ -69,6 +69,7 @@ def booking_details_loader(stmt):
             Cab.vehicle_type,
             Cab.capacity,
             Cab.color,
+            Cab.company_model
         ),
 
         # DRIVER
@@ -278,6 +279,7 @@ def serialize_booking_cab(item: BookingCab):
                 "vehicle_type": cab.vehicle_type,
                 "capacity": cab.capacity,
                 "color": cab.color,
+                "model": cab.company_model,
             }
             if cab
             else None

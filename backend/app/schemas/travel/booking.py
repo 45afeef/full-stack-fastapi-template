@@ -102,7 +102,7 @@ class BookingTravellerRead(SQLModel):
     traveller: Optional[ProfileRead] = None
     
     @property
-    def traveller_name(self) -> str:
+    def name(self) -> str:
         """Return traveller name if available"""
         if self.traveller:
             return self.traveller.full_name
@@ -287,7 +287,7 @@ class BookingRead(SQLModel):
     @property
     def traveller_names(self) -> list[str]:
         """Return list of traveller names"""
-        return [t.traveller_name for t in self.travellers]
+        return [t.name for t in self.travellers]
     
     @property
     def traveller_count(self) -> int:
@@ -303,6 +303,76 @@ class BookingRead(SQLModel):
     def stay_count(self) -> int:
         """Return count of stays"""
         return len(self.stays)
+
+
+class BookingTravellerPublic(SQLModel):
+    id: UUID
+    first_name: Optional[str]
+    last_name: Optional[str] = None
+    phone: Optional[str]
+    email: Optional[str] = None
+
+class BookingCabProviderPublic(SQLModel):
+    id: UUID
+    name: str
+    cabs: Optional[list["BookingCabPublic"]] = []
+
+    class BookingCabPublic(SQLModel):
+        id: UUID
+        pickup_time: Optional[datetime] = None
+        pickup_location: Optional[str] = None
+        drop_time: Optional[datetime] = None
+        drop_location: Optional[str] = None
+        rate: Optional[int] = None
+        status: Optional[BookingStatus] = None
+        cab : Optional["CabPublic"] = None
+        driver: Optional["DriverPublic"] = None
+    
+        class CabPublic(SQLModel):
+            id: UUID
+            name: Optional[str] = None
+            vehicle_number: Optional[str] = None
+            vehicle_type: Optional[str] = None
+            capacity: Optional[int] = None
+            color: Optional[str] = None
+            model: Optional[str] = None
+        
+        class DriverPublic(SQLModel):
+            id: UUID
+            first_name: Optional[str] = None
+            last_name: Optional[str] = None
+            phone: Optional[str] = None
+    
+
+class BookingStayProviderPublic(SQLModel):
+    id: UUID
+    name: str
+    stays: Optional[list["BookingStayPublic"]] = []
+
+    class BookingStayPublic(SQLModel):
+        id: UUID
+        check_in: Optional[datetime] = None
+        check_out: Optional[datetime] = None
+        room_type: Optional[str] = None
+        rate: Optional[int] = None
+        status: Optional[BookingStatus] = None
+        unit: Optional[list["StayUnitPublic"]] = None
+        
+        class StayUnitPublic(SQLModel):
+            id:UUID
+            name: Optional[str] = None
+            room_rate: Optional[int] = None
+            max_occupancy: Optional[int] = None
+
+
+class BookingResponse(SQLModel):
+        id: UUID
+        booking_date: Optional[datetime]
+        status: Optional[BookingStatus ] = None
+        total_amount: Optional[int] = None
+        travellers: Optional[list[BookingTravellerPublic]] = []
+        cab_providers: Optional[list[BookingCabProviderPublic]] = []
+        stay_providers: Optional[list[BookingStayProviderPublic]] = []
 
 
 __all__ = [

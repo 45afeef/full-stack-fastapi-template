@@ -15,7 +15,7 @@ from app.models.travel.providers import TravelAgencyStaff, TravelAgency, CabServ
 from app.models.travel.cab import Cab, Driver
 from app.models.travel.stay import StayUnit
 from app.models.user.profile import Profile
-from app.schemas.travel.booking import BookingCreate, BookingUpdate, BookingRead
+from app.schemas.travel.booking import BookingCreate, BookingResponse, BookingUpdate, BookingRead
 
 
 router = APIRouter(prefix="/booking", tags=["booking"])
@@ -67,6 +67,7 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
 
     # attach staff agency fields if available
     if staff_rec:
+        # TODO: verify that only staff can create a booking (super user can but it is exceptional)
         payload["travel_agency_id"] = str(staff_rec.travel_agency_id)
         payload["travel_agency_staff_id"] = str(staff_rec.id)
 
@@ -160,7 +161,7 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
     return session.exec(stmt).first()
 
 
-@router.get("/")
+@router.get("/", dependencies=[Depends(get_current_user)], response_model=list[BookingResponse])
 def list_bookings(session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100) -> Any:
     """
     List bookings with all nested information (travellers, cabs, stays) with permission rules:
@@ -171,7 +172,10 @@ def list_bookings(session: SessionDep, current_user: CurrentUser, skip: int = 0,
 
     stmt = select(Booking)
     
-    # superuser: return all
+    # Check Authentication
+    # Superuser: return all
+    # Owner: can see all booking of thier owned agencies
+    # Staff: can see booking created by themself
     if current_user.is_superuser:
         pass
 
