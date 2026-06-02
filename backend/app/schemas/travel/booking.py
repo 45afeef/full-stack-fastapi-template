@@ -60,15 +60,36 @@ class BookingCreate(SQLModel):
     booking_date: Optional[datetime] = None
     status: Optional[BookingStatus] = None
     total_amount: Optional[int] = None # This is charged to the customer, (not the agency cost)
-    travel_agency_id: Optional[UUID] = None
+    travel_agency_id: Optional[UUID] = None # This can be set by the API based on the authenticated user's agency, but allowing it here for flexibility in case we want to create bookings for other agencies (e.g. admin users), and incase the user is staff in multiple agencies and wants to specify which one the booking is for. The API should validate that the specified agency_id is one of the agencies the user belongs to.
     # nested sub-resources
     travellers: Optional[list[BookingTravellerCreate]] = None
     cabs: Optional[list[BookingCabCreate]] = None
     stays: Optional[list[BookingStayCreate]] = None
 
 
-class BookingUpdate(BookingCreate):
-    pass
+class BookingTravellerUpdate(BookingTravellerCreate):
+    id: Optional[UUID] = None
+
+    @model_validator(mode="after")
+    def validate_traveller_input(self):
+        pass
+
+
+class BookingCabUpdate(BookingCabCreate):
+    id: Optional[UUID] = None
+
+
+class BookingStayUpdate(BookingStayCreate):
+    id: Optional[UUID] = None
+
+class BookingUpdate(SQLModel):
+    booking_date: Optional[datetime] = None
+    status: Optional[BookingStatus] = None
+    total_amount: Optional[int] = None
+
+    travellers: Optional[list[BookingTravellerUpdate]] = None
+    cabs: Optional[list[BookingCabUpdate]] = None
+    stays: Optional[list[BookingStayUpdate]] = None
 
 
 # Response schemas with nested data

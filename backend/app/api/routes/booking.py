@@ -289,44 +289,603 @@ def get_booking(booking_id: uuid.UUID, session: SessionDep, current_user: Curren
 
     return serialize_booking(booking)
 
+# item = item if isinstance(item, dict) else item.model_dump(exclude_unset=True)
+
 
 @router.patch("/{booking_id}", dependencies=[Depends(get_current_user)], response_model=BookingRead)
 def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: SessionDep, current_user: CurrentUser) -> Any:
-    """Update booking. Staff can update only their own bookings; superuser allowed to update any. Returns updated booking with all nested data."""
+    """
+    Update a booking and synchronize all related records.
+
+    ===========================================================================
+    UPDATE STRATEGY
+    ===========================================================================
+
+    This endpoint uses DIFFERENTIAL SYNCHRONIZATION for nested collections.
+
+    Booking scalar fields:
+        - booking_date
+        - status
+        - total_amount
+
+    are updated normally.
+
+    Nested collections:
+        - travellers
+        - cabs
+        - stays
+
+    are synchronized using the following rules:
+
+    ---------------------------------------------------------------------------
+    Rule #1: Collection omitted
+    ---------------------------------------------------------------------------
+
+    Request:
+
+        {
+            "status": "confirmed"
+        }
+
+    Result:
+
+        - booking.status updated
+        - travellers unchanged
+        - cabs unchanged
+        - stays unchanged
+
+    ---------------------------------------------------------------------------
+    Rule #2: Existing child row (id provided)
+    ---------------------------------------------------------------------------
+
+    Request:
+
+        {
+            "cabs": [
+                {
+                    "id": "booking-cab-row-id",
+                    "status": "confirmed"
+                }
+            ]
+        }
+
+    Result:
+
+        Existing BookingCab row is updated.
+
+    ---------------------------------------------------------------------------
+    Rule #3: New child row (id omitted)
+    ---------------------------------------------------------------------------
+
+    Request:
+
+        {
+            "cabs": [
+                {
+                    "cab_id": "cab-id",
+                    "pickup_location": "Airport"
+                }
+            ]
+        }
+
+    Result:
+
+        New BookingCab row is created.
+
+    ---------------------------------------------------------------------------
+    Rule #4: Existing row missing from payload
+    ---------------------------------------------------------------------------
+
+    Existing DB:
+
+        Traveller A
+        Traveller B
+        Traveller C
+
+    Payload:
+
+        {
+            "travellers": [
+                { "id": "TravellerA" },
+                { "id": "TravellerC" }
+            ]
+        }
+
+    Result:
+
+        Traveller B association is deleted.
+
+    ---------------------------------------------------------------------------
+    Rule #5: Empty collection
+    ---------------------------------------------------------------------------
+
+    Request:
+
+        {
+            "travellers": []
+        }
+
+    Result:
+
+        All BookingTraveller rows are removed.
+
+    ===========================================================================
+    IMPORTANT
+    ===========================================================================
+
+    BookingTravellerUpdate
+    BookingCabUpdate
+    BookingStayUpdate
+
+    MUST contain:
+
+        id: Optional[UUID] = None
+
+    where the id refers to:
+
+        BookingTraveller.id
+        BookingCab.id
+        BookingStay.id
+
+    NOT:
+
+        traveller_id
+        cab_id
+        stayunit_id
+
+    ===========================================================================
+    TRANSACTIONAL GUARANTEE
+    ===========================================================================
+
+    Entire update is executed in a single transaction.
+
+    If any validation fails:
+
+        - rollback everything
+        - leave database unchanged
+    """
+
+    # -----------------------------------------------------------------------
+    # Load booking
+    # -----------------------------------------------------------------------
     booking = session.get(Booking, booking_id)
+
     if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found")
+        # don't reveal that the booking doesn't exist vs. not authorized
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to update this booking",
+        )
 
+    # -----------------------------------------------------------------------
+    # Authorization
+    #
+    # Superuser:
+    #   Can update any booking
+    #
+    # Staff:
+    #   Can update only bookings owned by them
+    # -----------------------------------------------------------------------
     if not current_user.is_superuser:
-        # must be staff and owner of booking
-        staff_records = _get_staff_records(session, current_user.id)
+
+        staff_records = _get_staff_records(
+            session,
+            current_user.id,
+        )
+
         if not staff_records:
-            raise HTTPException(status_code=403, detail="Not authorized to update booking")
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to update booking",
+            )
+
         staff_ids = {s.id for s in staff_records}
+
         if booking.travel_agency_staff_id not in staff_ids:
-            raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to update this booking",
+            )
 
+    # -----------------------------------------------------------------------
+    # Convert incoming payload to dictionary
+    # -----------------------------------------------------------------------
+    print(booking_in)
     update_data = booking_in.model_dump(exclude_unset=True)
-    # disallow changing ownership fields
-    for k in ("id", "travel_agency_id", "travel_agency_staff_id"):
-        update_data.pop(k, None)
+    print("update_data afeef")
+    print(update_data)
 
-    booking.sqlmodel_update(update_data)
-    session.add(booking)
-    session.commit()
-    session.refresh(booking)
-    
-    # Load nested relationships
-    stmt = (select(Booking)
+    # -----------------------------------------------------------------------
+    # Extract nested collections
+    #
+    # We handle these separately because they require synchronization logic.
+    # -----------------------------------------------------------------------
+    travellers_payload = update_data.pop("travellers", None)
+    cabs_payload = update_data.pop("cabs", None)
+    stays_payload = update_data.pop("stays", None)
+
+    print("afeef travellers_payload")
+    print(travellers_payload)
+
+    # -----------------------------------------------------------------------
+    # Prevent ownership changes
+    #
+    # These fields are immutable once booking is created.
+    # -----------------------------------------------------------------------
+    for field in (
+        "id",
+        "travel_agency_id",
+        "travel_agency_staff_id",
+    ):
+        update_data.pop(field, None)
+
+    try:
+
+        # ===================================================================
+        # STEP 1
+        # Update booking scalar fields
+        # ===================================================================
+        booking.sqlmodel_update(update_data)
+
+        session.add(booking)
+
+        # Flush so SQLAlchemy tracks updates immediately.
+        session.flush()
+
+        # ===================================================================
+        # STEP 2
+        # Synchronize Travellers
+        # ===================================================================
+        if travellers_payload is not None:
+
+            # Existing BookingTraveller rows
+            existing_rows = {
+                str(row.id): row
+                for row in booking.travellers
+            }
+            print(existing_rows)
+
+            # Tracks rows present in payload
+            seen_ids = set()
+
+            for item in travellers_payload:
+                print('afeef')
+                print(item)
+
+                row_id = item.get("id")
+
+                # -----------------------------------------------------------
+                # UPDATE EXISTING ROW
+                # -----------------------------------------------------------
+                if row_id:
+
+                    row = existing_rows.get(str(row_id))
+
+                    if not row:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Traveller relation {row_id} "
+                                "does not belong to this booking"
+                            ),
+                        )
+                    
+                    # This will check if the traveller has a profile already, if and only if the traveller_id is provided. 
+                    # Otherwise a new profile should be created
+                    traveller_id = item.get("traveller_id")
+
+                    if traveller_id:
+
+                        traveller = session.get(
+                            Profile,
+                            traveller_id,
+                        )
+
+                        if not traveller:
+                            raise HTTPException(
+                                status_code=404,
+                                detail=(
+                                    f"Traveller profile "
+                                    f"{traveller_id} not found"
+                                ),
+                            )
+
+                        row.traveller_id = traveller_id
+
+                    seen_ids.add(str(row.id))
+
+                # -----------------------------------------------------------
+                # CREATE NEW ROW
+                # -----------------------------------------------------------
+                else:
+
+                    traveller_id = item.get("traveller_id")
+
+                    if not traveller_id:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                "traveller_id is required "
+                                "for new traveller rows"
+                            ),
+                        )
+
+                    traveller = session.get(
+                        Profile,
+                        traveller_id,
+                    )
+
+                    if not traveller:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=(
+                                f"Traveller profile "
+                                f"{traveller_id} not found"
+                            ),
+                        )
+
+                    session.add(
+                        BookingTraveller(
+                            booking_id=booking.id,
+                            traveller_id=traveller_id,
+                        )
+                    )
+
+            # ---------------------------------------------------------------
+            # DELETE REMOVED ROWS
+            #
+            # Any existing row not included in payload is removed.
+            # ---------------------------------------------------------------
+            for row_id, row in existing_rows.items():
+
+                if row_id not in seen_ids:
+                    session.delete(row)
+
+        # ===================================================================
+        # STEP 3
+        # Synchronize Cabs
+        # ===================================================================
+        if cabs_payload is not None:
+
+            existing_rows = {
+                str(row.id): row
+                for row in booking.cabs
+            }
+
+            seen_ids = set()
+
+            for item in cabs_payload:
+
+                row_id = item.get("id")
+
+                # -----------------------------------------------------------
+                # UPDATE EXISTING CAB
+                # -----------------------------------------------------------
+                if row_id:
+
+                    row = existing_rows.get(str(row_id))
+
+                    if not row:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Cab relation {row_id} "
+                                "does not belong to this booking"
+                            ),
+                        )
+
+                    # If cab changes, re-validate provider
+                    if item.get("cab_id"):
+
+                        cab = session.get(
+                            Cab,
+                            item["cab_id"],
+                        )
+
+                        if not cab:
+                            raise HTTPException(
+                                status_code=404,
+                                detail=f"Cab {item['cab_id']} not found",
+                            )
+
+                        row.cab_id = item["cab_id"]
+
+                        provider_id = (
+                            item.get("cab_provider_id")
+                            or getattr(cab, "cab_provider_id", None)
+                            or getattr(cab, "provider_id", None)
+                        )
+
+                        if not provider_id:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=(
+                                    f"Cab provider id required "
+                                    f"for cab {item['cab_id']}"
+                                ),
+                            )
+
+                        row.cab_provider_id = provider_id
+
+                    # Update mutable fields
+                    for field in (
+                        "pickup_time",
+                        "pickup_location",
+                        "drop_time",
+                        "drop_location",
+                        "driver_id",
+                        "rate",
+                        "status",
+                    ):
+                        if field in item:
+                            setattr(row, field, item[field])
+
+                    seen_ids.add(str(row.id))
+
+                # -----------------------------------------------------------
+                # CREATE NEW CAB
+                # -----------------------------------------------------------
+                else:
+
+                    cab_id = item.get("cab_id")
+
+                    if not cab_id:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="cab_id is required",
+                        )
+
+                    cab = session.get(Cab, cab_id)
+
+                    if not cab:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Cab {cab_id} not found",
+                        )
+
+                    provider_id = (
+                        item.get("cab_provider_id")
+                        or getattr(cab, "cab_provider_id", None)
+                        or getattr(cab, "provider_id", None)
+                    )
+
+                    if not provider_id:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Cab provider id required "
+                                f"for cab {cab_id}"
+                            ),
+                        )
+
+                    session.add(
+                        BookingCab(
+                            booking_id=booking.id,
+                            cab_id=cab_id,
+                            cab_provider_id=provider_id,
+                            pickup_time=item.get("pickup_time"),
+                            pickup_location=item.get("pickup_location"),
+                            drop_time=item.get("drop_time"),
+                            drop_location=item.get("drop_location"),
+                            driver_id=item.get("driver_id"),
+                            rate=item.get("rate"),
+                            status=item.get("status"),
+                        )
+                    )
+
+            # Delete removed rows
+            for row_id, row in existing_rows.items():
+
+                if row_id not in seen_ids:
+                    session.delete(row)
+
+        # ===================================================================
+        # STEP 4
+        # Synchronize Stays
+        # ===================================================================
+        if stays_payload is not None:
+
+            existing_rows = {
+                str(row.id): row
+                for row in booking.stays
+            }
+
+            seen_ids = set()
+
+            for item in stays_payload:
+
+                row_id = item.get("id")
+
+                # -----------------------------------------------------------
+                # UPDATE EXISTING STAY
+                # -----------------------------------------------------------
+                if row_id:
+
+                    row = existing_rows.get(str(row_id))
+
+                    if not row:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Stay relation {row_id} "
+                                "does not belong to this booking"
+                            ),
+                        )
+
+                    for field in (
+                        "stayunit_id",
+                        "stay_provider_id",
+                        "check_in",
+                        "check_out",
+                        "room_type",
+                        "rate",
+                        "status",
+                    ):
+                        if field in item:
+                            setattr(row, field, item[field])
+
+                    seen_ids.add(str(row.id))
+
+                # -----------------------------------------------------------
+                # CREATE NEW STAY
+                # -----------------------------------------------------------
+                else:
+
+                    session.add(
+                        BookingStay(
+                            booking_id=booking.id,
+                            stayunit_id=item.get("stayunit_id"),
+                            stay_provider_id=item.get("stay_provider_id"),
+                            check_in=item.get("check_in"),
+                            check_out=item.get("check_out"),
+                            room_type=item.get("room_type"),
+                            rate=item.get("rate"),
+                            status=item.get("status"),
+                        )
+                    )
+
+            # Delete removed rows
+            for row_id, row in existing_rows.items():
+
+                if row_id not in seen_ids:
+                    session.delete(row)
+
+        # ===================================================================
+        # STEP 5
+        # Commit transaction
+        # ===================================================================
+        session.commit()
+
+    except HTTPException:
+        session.rollback()
+        raise
+
+    except Exception:
+        session.rollback()
+        raise
+
+    # -----------------------------------------------------------------------
+    # Reload booking with all nested relationships
+    # -----------------------------------------------------------------------
+    stmt = (
+        select(Booking)
         .where(Booking.id == booking.id)
         .options(
-            selectinload(Booking.travellers).selectinload(BookingTraveller.traveller),
-            selectinload(Booking.cabs).selectinload(BookingCab.cab),
-            selectinload(Booking.cabs).selectinload(BookingCab.driver).selectinload(Driver.profile),
-            selectinload(Booking.stays).selectinload(BookingStay.stayunit)
+            selectinload(Booking.travellers)
+            .selectinload(BookingTraveller.traveller),
+
+            selectinload(Booking.cabs)
+            .selectinload(BookingCab.cab),
+
+            selectinload(Booking.cabs)
+            .selectinload(BookingCab.driver)
+            .selectinload(Driver.profile),
+
+            selectinload(Booking.stays)
+            .selectinload(BookingStay.stayunit),
         )
     )
-    return session.exec(stmt).first()
 
+    return session.exec(stmt).first()
 
 __all__ = ["router"]
