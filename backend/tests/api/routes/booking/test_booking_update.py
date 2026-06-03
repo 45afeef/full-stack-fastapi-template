@@ -182,14 +182,10 @@ class TestBookingTravellerSynchronization(BookingTestHelper):
             ctx["booking"].id,
         )
 
-        assert len(booking.travellers) == 2
+        assert len(booking.travellers) == 3
 
 
-    def test_remove_omitted_traveller(
-        self,
-        client,
-        db,
-    ):
+    def test_remove_omitted_traveller(self, client, db):
         ctx = self.create_booking_context(client, db)
 
         relation = ctx["booking"].travellers[0]
@@ -224,6 +220,7 @@ class TestBookingTravellerSynchronization(BookingTestHelper):
             t for t in booking.travellers
             if t.id != relation.id
         )
+        id = str(second_relation.id)
 
         r = client.patch(
             f"{settings.API_V1_STR}/booking/{ctx['booking'].id}",
@@ -237,15 +234,13 @@ class TestBookingTravellerSynchronization(BookingTestHelper):
 
         assert r.status_code == 200
 
-        booking = self.refresh_booking(
-            db,
-            ctx["booking"].id,
-        )
+        booking = self.refresh_booking(db,ctx["booking"].id)
 
         ids = {str(x.id) for x in booking.travellers}
 
         assert str(relation.id) in ids
-        assert str(second_relation.id) not in ids
+        assert id not in ids
+        assert len(booking.travellers) == 1
 
 
     def test_traveller_relation_must_belong_to_booking(

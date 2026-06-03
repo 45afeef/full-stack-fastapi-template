@@ -72,7 +72,31 @@ class BookingTravellerUpdate(BookingTravellerCreate):
 
     @model_validator(mode="after")
     def validate_traveller_input(self):
-        pass
+        has_id = self.id is not None
+
+        has_profile_id = self.traveller_id is not None
+
+        has_new_traveller_data = (
+            self.traveller_name is not None and
+            self.traveller_phone is not None
+        )
+
+        if not has_id and not has_profile_id and not has_new_traveller_data:
+            raise ValueError(
+                "Provide either traveller_id OR both traveller_name and traveller_phone to create a new traveller, or provide id to update existing traveller"
+            )
+
+        if has_profile_id and has_new_traveller_data:
+            raise ValueError(
+                "Provide either traveller_id OR traveller_name/traveller_phone, not both"
+            )
+        
+        if has_id and (has_profile_id or has_new_traveller_data):
+            raise ValueError(
+                "When id is provided, traveller_id and traveller_name/traveller_phone should not be provided"
+            )
+
+        return self
 
 
 class BookingCabUpdate(BookingCabCreate):

@@ -490,10 +490,7 @@ def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: Se
     # -----------------------------------------------------------------------
     # Convert incoming payload to dictionary
     # -----------------------------------------------------------------------
-    print(booking_in)
     update_data = booking_in.model_dump(exclude_unset=True)
-    print("update_data afeef")
-    print(update_data)
 
     # -----------------------------------------------------------------------
     # Extract nested collections
@@ -504,8 +501,6 @@ def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: Se
     cabs_payload = update_data.pop("cabs", None)
     stays_payload = update_data.pop("stays", None)
 
-    print("afeef travellers_payload")
-    print(travellers_payload)
 
     # -----------------------------------------------------------------------
     # Prevent ownership changes
@@ -543,14 +538,11 @@ def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: Se
                 str(row.id): row
                 for row in booking.travellers
             }
-            print(existing_rows)
 
             # Tracks rows present in payload
             seen_ids = set()
 
             for item in travellers_payload:
-                print('afeef')
-                print(item)
 
                 row_id = item.get("id")
 
