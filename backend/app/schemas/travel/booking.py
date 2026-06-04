@@ -370,10 +370,10 @@ class BookingCabProviderPublic(SQLModel):
         drop_location: Optional[str] = None
         rate: Optional[int] = None
         status: Optional[BookingStatus] = None
-        cab : Optional["CabPublic"] = None
-        driver: Optional["DriverPublic"] = None
+        cab : Optional["BookingCabItemPublic"] = None
+        driver: Optional["BookingDriverPublic"] = None
     
-        class CabPublic(SQLModel):
+        class BookingCabItemPublic(SQLModel):
             id: UUID
             name: Optional[str] = None
             vehicle_number: Optional[str] = None
@@ -382,7 +382,7 @@ class BookingCabProviderPublic(SQLModel):
             color: Optional[str] = None
             model: Optional[str] = None
         
-        class DriverPublic(SQLModel):
+        class BookingDriverPublic(SQLModel):
             id: UUID
             first_name: Optional[str] = None
             last_name: Optional[str] = None
@@ -401,9 +401,9 @@ class BookingStayProviderPublic(SQLModel):
         room_type: Optional[str] = None
         rate: Optional[int] = None
         status: Optional[BookingStatus] = None
-        unit: Optional[list["StayUnitPublic"]] = None
+        unit: Optional[list["BookingStayUnitPublic"]] = None
         
-        class StayUnitPublic(SQLModel):
+        class BookingStayUnitPublic(SQLModel):
             id:UUID
             name: Optional[str] = None
             room_rate: Optional[int] = None
