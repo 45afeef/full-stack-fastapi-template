@@ -22,7 +22,7 @@ def db() -> Generator[Session, None, None]:
         for model in [
             EnquiryDetails,
             StayAmenity,
-            StayUnit,            
+            StayUnit,
             BookingTraveller,
             BookingCab,
             BookingStay,

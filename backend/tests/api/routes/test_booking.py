@@ -42,7 +42,6 @@ class TestBookingRoutes:
 
         # staff creates booking
         booking_payload = {
-            "traveler_id": str(profile.id),
             "booking_date": datetime.utcnow().isoformat(),
             "total_amount": 12345,
             "travellers": [{"traveller_id": str(profile.id)}],
@@ -88,7 +87,6 @@ class TestBookingRoutes:
         db.refresh(profile)
 
         booking_payload = {
-            "traveler_id": str(profile.id),
             "booking_date": datetime.utcnow().isoformat(),
             "total_amount": 1000,
             "travellers": [{"traveller_id": str(profile.id)}],

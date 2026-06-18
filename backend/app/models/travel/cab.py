@@ -1,9 +1,13 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field, Relationship
 from sqlmodel import Column, DateTime, func
 from .enums import VehicleType
+
+if TYPE_CHECKING:
+    from app.models.user.profile import Profile
+    from app.models.travel import CabServiceProvider
 
 
 class Cab(SQLModel, table=True):
@@ -27,6 +31,8 @@ class Cab(SQLModel, table=True):
     company_model: str = Field(nullable=False)
     color: str = Field(nullable=False)
 
+    # Relationships
+    provider: "CabServiceProvider" = Relationship()
 
 
 class Driver(SQLModel, table=True): 
@@ -43,5 +49,9 @@ class Driver(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
     )
     
+    # Relationships
+    profile: "Profile" = Relationship()
+    provider: "CabServiceProvider" = Relationship()
+
 
 __all__ = ["Cab", "Driver"]

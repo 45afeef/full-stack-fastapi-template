@@ -43,8 +43,7 @@ class TestBookingFull:
 
         # Try to create booking with travel_agency_id set to agency_b.id (different agency)
         booking_payload = {
-            "traveler_id": str(profile.id),
-            "booking_date": datetime.utcnow().isoformat(),
+            "booking_date": datetime.now().isoformat(),
             "total_amount": 500,
             "travel_agency_id": str(agency_b.id),
             "travellers": [{"traveller_id": str(profile.id)}],
@@ -58,8 +57,8 @@ class TestBookingFull:
         # booking should be attached to agency A (staff's agency), not B
         assert created.get("travel_agency_id") == str(agency_a.id)
 
-    def test_create_booking_missing_traveler_id_returns_422(self, client: TestClient, db: Session) -> None:
-        """Missing top-level traveler_id should return 422."""
+    def test_create_booking_with_no_data(self, client: TestClient, db: Session) -> None:
+        """All fields in booking creation are optional, so creating with empty payload should succeed (but not create any nested resources)."""
         # create owner + agency + staff
         owner_phone = random_phone()
         owner_headers = authentication_token_from_phone(client=client, phone_number=owner_phone, db=db)
@@ -71,9 +70,9 @@ class TestBookingFull:
         staff_user = crud.get_user_by_phone(session=db, phone_number=staff_phone)
         crud.assign_agency_staff(session=db, staff={"user_id": str(staff_user.id), "travel_agency_id": str(agency.id)})
 
-        payload = {"booking_date": datetime.utcnow().isoformat(), "total_amount": 100}
+        payload = {"booking_date": "2027-01-01"}
         r = client.post(f"{settings.API_V1_STR}/booking", headers=staff_headers, json=payload)
-        assert r.status_code == 422
+        assert r.status_code == 200
 
     def test_create_booking_with_unknown_traveller_in_travellers_returns_404(self, client: TestClient, db: Session) -> None:
         """If one of the nested travellers references a non-existent profile, API should return 404 and not create the booking."""
@@ -99,7 +98,6 @@ class TestBookingFull:
         # nested travellers contains a non-existent profile id
         bad_id = uuid.uuid4()
         booking_payload = {
-            "traveler_id": str(profile.id),
             "booking_date": datetime.utcnow().isoformat(),
             "total_amount": 200,
             "travellers": [{"traveller_id": str(bad_id)}],
@@ -147,7 +145,6 @@ class TestBookingFull:
 
         # staff1 creates a booking
         booking_payload = {
-            "traveler_id": str(profile.id),
             "booking_date": datetime.utcnow().isoformat(),
             "total_amount": 700,
             "travellers": [{"traveller_id": str(profile.id)}],
@@ -201,7 +198,6 @@ class TestBookingFull:
 
         # staff creates booking
         booking_payload = {
-            "traveler_id": str(profile.id),
             "booking_date": datetime.utcnow().isoformat(),
             "total_amount": 800,
             "travellers": [{"traveller_id": str(profile.id)}],

@@ -1,9 +1,12 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from uuid import UUID, uuid4
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from .enums import AmenityScope
 from sqlmodel import Column, DateTime, func
+
+if TYPE_CHECKING:
+    from app.models.travel import StayServiceProvider
 
 class StayUnit(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -22,6 +25,8 @@ class StayUnit(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
     )
+
+    provider: "StayServiceProvider" = Relationship()
 
 
 # database table representing an amenity attached to a stay unit.  this
