@@ -8,6 +8,7 @@ from pydantic import model_validator
 
 
 class BookingTravellerCreate(SQLModel):
+    # Change the traveller_id to profile_id
     traveller_id: Optional[UUID] = None
     traveller_name: Optional[str] = None
     traveller_phone: Optional[str] = None

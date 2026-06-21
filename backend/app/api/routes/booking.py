@@ -15,7 +15,7 @@ from app.models.travel.providers import TravelAgencyStaff, TravelAgency, CabServ
 from app.models.travel.cab import Cab, Driver
 from app.models.travel.stay import StayUnit
 from app.models.user.profile import Profile
-from app.schemas.travel.booking import BookingCreate, BookingResponse, BookingUpdate, BookingRead
+from app.schemas.travel.booking import BookingCreate, BookingResponse, BookingTravellerCreate, BookingUpdate, BookingRead
 
 
 router = APIRouter(prefix="/booking", tags=["booking"])
@@ -26,10 +26,38 @@ def _get_staff_records(session: Session, user_id: uuid.UUID) -> list[TravelAgenc
     return session.exec(statement).all()
 
 
+def _get_or_create_profile(
+    session: Session,
+    traveller: BookingTravellerCreate,
+) -> Profile:
+
+    if traveller.traveller_id:
+        profile = session.get(Profile, traveller.traveller_id)
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Traveller profile {traveller.traveller_id} not found",
+            )
+
+        return profile
+
+    profile = Profile(
+        name=traveller.traveller_name,
+        phone=traveller.traveller_phone,
+    )
+
+    session.add(profile)
+    session.flush()
+
+    return profile
+
+
+
 @router.post("/", dependencies=[Depends(get_current_user)], response_model=BookingRead)
 def create_booking(session: SessionDep, booking_in: BookingCreate, current_user: CurrentUser) -> Any:
     """
-    Create a booking. Only agency staff may create bookings. This operation creates Booking and related
+    Create a booking and all related records transactionally. Only agency staff may create bookings. This operation creates Booking and related
     BookingTraveller/BookingCab/BookingStay rows transactionally. Returns complete booking with all nested data.
 
     **Authorization**: Only agency staff can create bookings. The booking will be associated with the staff user's agency and staff record.
@@ -39,125 +67,160 @@ def create_booking(session: SessionDep, booking_in: BookingCreate, current_user:
     # Verify Authorization:
     # Verifiy the user is staff for at least one agency (unless superuser) - we need this to determine which agency to attach the booking to and to enforce permissions. We require staff status to create a booking because we need to associate the booking with an agency, and only staff are associated with agencies.
     # require staff
+
+
+    # ------------------------------------------------------------------
+    # Authorization
+    # ------------------------------------------------------------------
     staff_records = _get_staff_records(session, current_user.id)
+
     if not staff_records and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Only agency staff can create bookings")
 
-    # Determine travel_agency and staff id to attach
     staff_rec = None
+
     if staff_records:
-        # prefer a staff record that matches provided agency if provided
         if booking_in.travel_agency_id:
-            for s in staff_records:
-                if str(s.travel_agency_id) == str(booking_in.travel_agency_id):
-                    staff_rec = s
-                    break
-        # otherwise take the first staff record
-        if not staff_rec:
-            staff_rec = staff_records[0]
+            staff_rec = next(
+                (
+                    staff
+                    for staff in staff_records
+                    if staff.travel_agency_id == booking_in.travel_agency_id
+                ),
+                None,
+            )
 
-    # do not set attributes on the input model (it's a pydantic/SQLModel instance);
-    # we'll inject these into the payload dict below when creating the Booking
+        staff_rec = staff_rec or staff_records[0]
 
-    # prepare booking data (exclude nested lists)
-    payload = booking_in.model_dump(exclude_unset=True)
-    travellers = payload.pop("travellers", None) or []
-    cabs = payload.pop("cabs", None) or []
-    stays = payload.pop("stays", None) or []
+    # ------------------------------------------------------------------
+    # Extract nested data before creating Booking
+    # ------------------------------------------------------------------
+    travellers: list[BookingTravellerCreate] = booking_in.travellers or []
+    cabs = booking_in.cabs or []
+    stays = booking_in.stays or []
 
-    # attach staff agency fields if available
+    payload = booking_in.model_dump(
+        exclude={
+            "travellers",
+            "cabs",
+            "stays",
+        },
+        exclude_unset=True,
+    )
+
     if staff_rec:
-        # TODO: verify that only staff can create a booking (super user can but it is exceptional)
-        payload["travel_agency_id"] = str(staff_rec.travel_agency_id)
-        payload["travel_agency_staff_id"] = str(staff_rec.id)
+        payload["travel_agency_id"] = staff_rec.travel_agency_id
+        payload["travel_agency_staff_id"] = staff_rec.id
 
-    # create in-session (avoid starting a nested transaction; the session may already be transactional in tests)
     try:
+        # ------------------------------------------------------------------
+        # Create booking
+        # ------------------------------------------------------------------
         booking_obj = Booking(**payload)
+
         session.add(booking_obj)
-        # flush to populate booking_obj.id for FK references
         session.flush()
 
-        # create traveller links
-        for t in travellers:
-            # ensure traveller profile exists
-            traveller_id = t["traveller_id"] if isinstance(t, dict) else t.traveller_id
-            p = session.get(Profile, traveller_id)
-            if not p:
-                session.rollback()
-                raise HTTPException(status_code=404, detail=f"Traveller profile {traveller_id} not found")
-            bt = BookingTraveller(booking_id=booking_obj.id, traveller_id=traveller_id)
-            session.add(bt)
+        # ------------------------------------------------------------------
+        # Travellers
+        # ------------------------------------------------------------------
+        for traveller in travellers:
 
-        # create cab links
-        for c in cabs:
-            cab_id = c["cab_id"] if isinstance(c, dict) else c.cab_id
-            cab_obj = session.get(Cab, cab_id)
+            profile = _get_or_create_profile(session,traveller)
+
+            session.add(
+                BookingTraveller(
+                    booking_id=booking_obj.id,
+                    traveller_id=profile.id,
+                )
+            )
+
+        # ------------------------------------------------------------------
+        # Cabs
+        # ------------------------------------------------------------------
+        for cab in cabs:
+
+            cab_obj = session.get(Cab, cab.cab_id)
+
             if not cab_obj:
-                session.rollback()
-                raise HTTPException(status_code=404, detail=f"Cab {cab_id} not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Cab {cab.cab_id} not found",
+                )
 
             cab_provider_id = (
-                c["cab_provider_id"] if isinstance(c, dict) and c.get("cab_provider_id") is not None
-                else getattr(c, "cab_provider_id", None)
+                cab.cab_provider_id
+                or getattr(cab_obj, "cab_provider_id", None)
+                or getattr(cab_obj, "provider_id", None)
             )
+
             if not cab_provider_id:
-                cab_provider_id = getattr(cab_obj, "cab_provider_id", None) or getattr(cab_obj, "provider_id", None)
-            if not cab_provider_id:
-                session.rollback()
-                raise HTTPException(status_code=400, detail=f"Cab provider id for cab {cab_id} is required")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cab provider id for cab {cab.cab_id} is required",
+                )
 
-            bc = BookingCab(
-                booking_id=booking_obj.id,
-                cab_id=cab_id,
-                cab_provider_id=cab_provider_id,
-                pickup_time=(c.get("pickup_time") if isinstance(c, dict) else c.pickup_time),
-                pickup_location=(c.get("pickup_location") if isinstance(c, dict) else c.pickup_location),
-                drop_time=(c.get("drop_time") if isinstance(c, dict) else c.drop_time),
-                drop_location=(c.get("drop_location") if isinstance(c, dict) else c.drop_location),
-                driver_id=(c.get("driver_id") if isinstance(c, dict) else c.driver_id),
-                rate=(c.get("rate") if isinstance(c, dict) else c.rate),
-                status=(c.get("status") if isinstance(c, dict) else c.status),
-                notes=(c.get("notes") if isinstance(c, dict) else c.notes),
+            session.add(
+                BookingCab(
+                    booking_id=booking_obj.id,
+                    cab_id=cab.cab_id,
+                    cab_provider_id=cab_provider_id,
+                    pickup_time=cab.pickup_time,
+                    pickup_location=cab.pickup_location,
+                    drop_time=cab.drop_time,
+                    drop_location=cab.drop_location,
+                    driver_id=cab.driver_id,
+                    rate=cab.rate,
+                    status=cab.status,
+                    # notes=cab.notes,
+                )
             )
-            session.add(bc)
 
-        # create stay links
-        for s in stays:
-            stayunit_id = s.get("stayunit_id") if isinstance(s, dict) else getattr(s, "stayunit_id", None)
-            bs = BookingStay(
-                booking_id=booking_obj.id,
-                stayunit_id=stayunit_id,
-                stay_provider_id=(s.get("stay_provider_id") if isinstance(s, dict) else getattr(s, "stay_provider_id", None)),
-                check_in=(s.get("check_in") if isinstance(s, dict) else getattr(s, "check_in", None)),
-                check_out=(s.get("check_out") if isinstance(s, dict) else getattr(s, "check_out", None)),
-                room_type=(s.get("room_type") if isinstance(s, dict) else getattr(s, "room_type", None)),
-                rate=(s.get("rate") if isinstance(s, dict) else getattr(s, "rate", None)),
-                status=(s.get("status") if isinstance(s, dict) else getattr(s, "status", None)),
+        # ------------------------------------------------------------------
+        # Stays
+        # ------------------------------------------------------------------
+        for stay in stays:
+            session.add(
+                BookingStay(
+                    booking_id=booking_obj.id,
+                    stayunit_id=stay.stayunit_id,
+                    stay_provider_id=stay.stay_provider_id,
+                    check_in=stay.check_in,
+                    check_out=stay.check_out,
+                    room_type=stay.room_type,
+                    rate=stay.rate,
+                    status=stay.status,
+                )
             )
-            session.add(bs)
 
-        # commit once everything is added
         session.commit()
-    except HTTPException:
-        # already rolled back where appropriate; re-raise
-        raise
+
     except Exception:
         session.rollback()
         raise
 
-    # refresh and reload all nested data
-    session.refresh(booking_obj)
-    # Load nested relationships
-    stmt = (select(Booking)
+    # ------------------------------------------------------------------
+    # Reload with relationships
+    # ------------------------------------------------------------------
+    stmt = (
+        select(Booking)
         .where(Booking.id == booking_obj.id)
         .options(
-            selectinload(Booking.travellers).selectinload(BookingTraveller.traveller),
-            selectinload(Booking.cabs).selectinload(BookingCab.cab),
-            selectinload(Booking.cabs).selectinload(BookingCab.driver).selectinload(Driver.profile),
-            selectinload(Booking.stays).selectinload(BookingStay.stayunit).selectinload(StayUnit.provider)
+            selectinload(Booking.travellers).selectinload(
+                BookingTraveller.traveller
+            ),
+            selectinload(Booking.cabs).selectinload(
+                BookingCab.cab
+            ),
+            selectinload(Booking.cabs)
+            .selectinload(BookingCab.driver)
+            .selectinload(Driver.profile),
+            selectinload(Booking.stays)
+            .selectinload(BookingStay.stayunit)
+            .selectinload(StayUnit.provider),
         )
     )
+
     return session.exec(stmt).first()
 
 
