@@ -43,8 +43,8 @@ def _get_or_create_profile(
         return profile
 
     profile = Profile(
-        name=traveller.traveller_name,
-        phone=traveller.traveller_phone,
+        first_name=traveller.traveller_name,
+        primary_phone_number=traveller.traveller_phone,
     )
 
     session.add(profile)
