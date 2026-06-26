@@ -23,7 +23,8 @@ class BookingTestHelper(TestHelper):
         traveller_profiles = traveller_profiles or []
 
         payload = {
-            "booking_date": datetime.now().isoformat(),
+            "date_starting_from": datetime.now().isoformat(),
+            "date_ending_on": datetime.now().isoformat(),
             "total_amount": total_amount,
             "travellers": [
                 {

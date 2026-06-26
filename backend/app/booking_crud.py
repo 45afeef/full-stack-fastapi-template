@@ -22,7 +22,8 @@ def booking_details_loader(stmt):
         # =================================================
         load_only(
             Booking.id,
-            Booking.booking_date,
+            Booking.date_starting_from,
+            Booking.date_ending_on,
             Booking.status,
             Booking.total_amount,
         ),
@@ -192,7 +193,8 @@ def serialize_booking(booking: Booking):
 
     return {
         "id": booking.id,
-        "booking_date": booking.booking_date,
+        "date_starting_from": booking.date_starting_from,
+        "date_ending_on": booking.date_ending_on,
         "status": booking.status,
         "total_amount": booking.total_amount,
 

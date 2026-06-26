@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session
@@ -43,7 +43,8 @@ class TestBookingFull:
 
         # Try to create booking with travel_agency_id set to agency_b.id (different agency)
         booking_payload = {
-            "booking_date": datetime.now().isoformat(),
+            "date_starting_from": datetime.now().isoformat(),
+            "date_ending_on": (datetime.now() + timedelta(days=3)).isoformat(),
             "total_amount": 500,
             "travel_agency_id": str(agency_b.id),
             "travellers": [{"traveller_id": str(profile.id)}],
@@ -70,7 +71,7 @@ class TestBookingFull:
         staff_user = crud.get_user_by_phone(session=db, phone_number=staff_phone)
         crud.assign_agency_staff(session=db, staff={"user_id": str(staff_user.id), "travel_agency_id": str(agency.id)})
 
-        payload = {"booking_date": "2027-01-01"}
+        payload = {"date_starting_from": "2027-01-01","date_ending_on": "2027-03-01"}
         r = client.post(f"{settings.API_V1_STR}/booking", headers=staff_headers, json=payload)
         assert r.status_code == 200
 
@@ -98,7 +99,8 @@ class TestBookingFull:
         # nested travellers contains a non-existent profile id
         bad_id = uuid.uuid4()
         booking_payload = {
-            "booking_date": datetime.utcnow().isoformat(),
+            "date_starting_from": datetime.utcnow().isoformat(),
+            "date_ending_on": (datetime.now() + timedelta(days=2)).isoformat(),
             "total_amount": 200,
             "travellers": [{"traveller_id": str(bad_id)}],
             "cabs": [],
@@ -145,7 +147,8 @@ class TestBookingFull:
 
         # staff1 creates a booking
         booking_payload = {
-            "booking_date": datetime.utcnow().isoformat(),
+            "date_starting_from": datetime.utcnow().isoformat(),
+            "date_ending_on": (datetime.now() + timedelta(days=1)).isoformat(),
             "total_amount": 700,
             "travellers": [{"traveller_id": str(profile.id)}],
             "cabs": [],
@@ -198,7 +201,8 @@ class TestBookingFull:
 
         # staff creates booking
         booking_payload = {
-            "booking_date": datetime.utcnow().isoformat(),
+            "date_starting_from": (datetime.now() + timedelta(days=3)).isoformat(),
+            "date_ending_on": (datetime.now() + timedelta(days=7)).isoformat(),
             "total_amount": 800,
             "travellers": [{"traveller_id": str(profile.id)}],
             "cabs": [],

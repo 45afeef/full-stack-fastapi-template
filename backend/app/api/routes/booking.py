@@ -277,7 +277,7 @@ def list_bookings(session: SessionDep, current_user: CurrentUser, skip: int = 0,
         booking_details_loader(stmt)
         .offset(skip)
         .limit(limit)
-        .order_by(Booking.booking_date.desc())
+        .order_by(Booking.created_at.desc())
     )
 
     bookings = session.exec(stmt).all()
@@ -367,7 +367,8 @@ def update_booking(booking_id: uuid.UUID, booking_in: BookingUpdate, session: Se
     This endpoint uses DIFFERENTIAL SYNCHRONIZATION for nested collections.
 
     Booking scalar fields:
-        - booking_date
+        - date_starting_from
+        - date_ending_on
         - status
         - total_amount
 

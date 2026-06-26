@@ -58,7 +58,8 @@ class BookingStayCreate(SQLModel):
 
 
 class BookingCreate(SQLModel):
-    booking_date: Optional[datetime] = None
+    date_starting_from: Optional[datetime] = None
+    date_ending_on: Optional[datetime] = None
     status: Optional[BookingStatus] = None
     total_amount: Optional[int] = None # This is charged to the customer, (not the agency cost)
     travel_agency_id: Optional[UUID] = None # This can be set by the API based on the authenticated user's agency, but allowing it here for flexibility in case we want to create bookings for other agencies (e.g. admin users), and incase the user is staff in multiple agencies and wants to specify which one the booking is for. The API should validate that the specified agency_id is one of the agencies the user belongs to.
@@ -108,7 +109,8 @@ class BookingStayUpdate(BookingStayCreate):
     id: Optional[UUID] = None
 
 class BookingUpdate(SQLModel):
-    booking_date: Optional[datetime] = None
+    date_starting_from: Optional[datetime] = None
+    date_ending_on: Optional[datetime] = None
     status: Optional[BookingStatus] = None
     total_amount: Optional[int] = None
 
@@ -320,7 +322,8 @@ class BookingRead(SQLModel):
     travel_agency_id: Optional[UUID] = None
     travel_agency_staff_id: Optional[UUID] = None
     enquiry_id: Optional[UUID] = None
-    booking_date: Optional[datetime] = None
+    date_starting_from: Optional[datetime] = None
+    date_ending_on: Optional[datetime] = None
     status: Optional[BookingStatus] = None
     total_amount: Optional[int] = None
     created_at: Optional[datetime] = None
@@ -413,7 +416,8 @@ class BookingStayProviderPublic(SQLModel):
 
 class BookingResponse(SQLModel):
         id: UUID
-        booking_date: Optional[datetime]
+        date_starting_from: Optional[datetime] = None
+        date_ending_on: Optional[datetime] = None
         status: Optional[BookingStatus ] = None
         total_amount: Optional[int] = None
         travellers: Optional[list[BookingTravellerPublic]] = []

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session
@@ -42,7 +42,8 @@ class TestBookingRoutes:
 
         # staff creates booking
         booking_payload = {
-            "booking_date": datetime.utcnow().isoformat(),
+            "date_starting_from": datetime.now().isoformat(),
+            "date_ending_on": (datetime.now() + timedelta(days=7)).isoformat(),
             "total_amount": 12345,
             "travellers": [{"traveller_id": str(profile.id)}],
             "cabs": [],
@@ -87,7 +88,8 @@ class TestBookingRoutes:
         db.refresh(profile)
 
         booking_payload = {
-            "booking_date": datetime.utcnow().isoformat(),
+            "date_starting_from": (datetime.now() + timedelta(days=-7)).isoformat(),
+            "date_ending_on": (datetime.now() + timedelta(days=-4)).isoformat(),
             "total_amount": 1000,
             "travellers": [{"traveller_id": str(profile.id)}],
             "cabs": [],

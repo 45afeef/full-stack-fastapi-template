@@ -20,10 +20,15 @@ class Booking(SQLModel, table=True):
     travel_agency_id: Optional[UUID] = Field(default=None, foreign_key="travelagency.id")
     travel_agency_staff_id: Optional[UUID] = Field(default=None, foreign_key="travelagencystaff.id")
     enquiry_id: Optional[UUID] = Field(default=None, foreign_key="enquirydetails.id")
-    booking_date: Optional[datetime] = Field(
+    date_starting_from: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
+    date_ending_on: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+
     status: Optional[BookingStatus] = Field(default=None)
     total_amount: Optional[int] = Field(default=None)
     created_at: Optional[datetime] = Field(
@@ -88,7 +93,7 @@ class BookingCab(SQLModel, table=True):
 
 class BookingStay(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    stayunit_id: UUID = Field(default=None,foreign_key="stayunit.id")
+    stayunit_id: Optional[UUID] = Field(default=None,foreign_key="stayunit.id")
     booking_id: UUID = Field(foreign_key="booking.id")
     stay_provider_id: UUID = Field(foreign_key="stayserviceprovider.provider_id")
     check_in: Optional[datetime] = Field(default=None)
